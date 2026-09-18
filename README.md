@@ -3,204 +3,258 @@
   <h1>Overleaf-Bib-Helper</h1>
 </div>
 
-<p align="center">
-  A UserScript to enhance Overleaf by allowing article searches and BibTeX retrieval from DBLP and Google Scholar directly within the Overleaf editor.
-</p>
+一个增强 Overleaf 功能的用户脚本，支持直接在 Overleaf 编辑器内搜索论文，并从 DBLP 和 Google Scholar 来源获取 BibTeX 条目。
 
 <p align="center">
   <a href="https://greasyfork.org/zh-CN/scripts/532304-overleaf-bib-helper">
-    <img alt="Install from Greasy Fork" src="https://img.shields.io/badge/Install-Greasy_Fork-blue" />
+    <img alt="从Greasy Fork安装" src="https://img.shields.io/badge/Install-Greasy_Fork-blue" />
   </a>
   <a href="https://github.com/MLNLP-World/Overleaf-Bib-Helper/releases">
-    <img alt="Version" src="https://img.shields.io/badge/Version-2.2.1-blue" />
+    <img alt="版本" src="https://img.shields.io/github/v/release/MLNLP-World/Overleaf-Bib-Helper" />
   </a>
   <a href="LICENSE">
-    <img alt="License" src="https://img.shields.io/badge/License-MIT-blue" />
+    <img alt="许可证" src="https://img.shields.io/badge/License-MIT-blue" />
   </a>
   <a href="https://github.com/MLNLP-World/Overleaf-Bib-Helper/stargazers">
-    <img alt="Stars" src="https://img.shields.io/github/stars/MLNLP-World/Overleaf-Bib-Helper" />
+    <img alt="星标" src="https://img.shields.io/github/stars/MLNLP-World/Overleaf-Bib-Helper" />
   </a>
   <a href="https://github.com/MLNLP-World/Overleaf-Bib-Helper/network/members">
-    <img alt="Forks" src="https://img.shields.io/github/forks/MLNLP-World/Overleaf-Bib-Helper" />
+    <img alt="分叉" src="https://img.shields.io/github/forks/MLNLP-World/Overleaf-Bib-Helper" />
   </a>
   <a href="https://github.com/MLNLP-World/Overleaf-Bib-Helper/issues">
-    <img alt="Issues" src="https://img.shields.io/github/issues/MLNLP-World/Overleaf-Bib-Helper" />
+    <img alt="问题" src="https://img.shields.io/github/issues/MLNLP-World/Overleaf-Bib-Helper" />
   </a>
   <a href="https://github.com/MLNLP-World/Overleaf-Bib-Helper/pulls">
-    <img alt="PRs Welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square" />
+    <img alt="欢迎PR" src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square" />
   </a>
 </p>
 
----
-
 <div>
 <p align="center">
-      <a href="README-ZH.md">中文文档</a> •
-      <a href="#installation">Installation</a> •
-      <a href="#usage">Usage</a> •
-      <a href="#supported-sources">Supported Sources</a> •
-      <a href="#troubleshooting">Troubleshooting</a> •
-      <a href="#disclaimer">Disclaimer</a> •
-      <a href="#changelog">Changelog</a> •
-      <a href="#license">License</a> •
-      <a href="#contributing">Contributing</a> •
-      <a href="#contact">Contact</a> •
-      <a href="#organizers">Organizers</a> •
-      <a href="#acknowledgments">Acknowledgments</a>
+      <a href="#项目动机">项目动机</a> •
+      <a href="#更新日志">更新日志</a> •
+      <a href="#快速开始">快速开始</a> •
+      <a href="#使用方法">使用方法</a> •
+      <a href="#支持的来源">支持的来源</a> •
+      <a href="#故障排除">故障排除</a> •
+      <a href="#免责声明">免责声明</a> •
+      <a href="#反馈和贡献">反馈和贡献</a> •
+      <a href="#致谢">致谢</a>
     </p>
 </div>
 
-## Motivation
-Writing LaTeX documents often requires including numerous academic references. Manually searching for and formatting BibTeX entries can be time-consuming. Overleaf-Bib-Helper streamlines this process by integrating search functionality from DBLP and Google Scholar right into the Overleaf interface, allowing users to quickly find and copy BibTeX entries with minimal effort.
-
-## Features
-- Original official BibTeX across AI, ML, NLP, and CV: NeurIPS, PMLR, ACL Anthology, OpenReview, CVF, ECVA/Springer, BMVC, AAAI, IJCAI, KR, ACM, and IEEE, with visible citation provenance and an explicit DBLP fallback.
-- Current and legacy Overleaf toolbar support, including recovery after file and layout changes.
-- Open with **Alt+Shift+B** or the Tampermonkey menu; selected text can prefill the search.
-- Editable BibTeX preview, citation-key editing, copy key or `\cite{key}`, and `.bib` download.
-- Ten recent queries and an in-session cache of validated BibTeX. DBLP is the default for new users; existing source preferences are preserved.
-- Collapsible search options, a viewport-sized panel, and the Overleaf editor’s light/dark theme.
-- Search for academic articles from DBLP or Google Scholar within Overleaf.
-- Retrieve and copy BibTeX entries with a single click.
-- Group same-title results into “Versions (n)” with “Copy best”.
-- Prefer conference/journal (“Published”) vs arXiv/CoRR (“Preprint”) BibTeX on DBLP.
-- Year-range filter and ordering controls (relevance/newest/oldest, depending on source).
-- Configurable result counts (5, 10, 20, or 50 results).
-- Scrollable results list for easy browsing.
-- Keyboard shortcuts: Enter to search, Esc to close the popup.
-- Supports multiple Google Scholar mirrors for accessibility.
-
-## Installation
-### Step 1: Install Tampermonkey
-Tampermonkey is a browser extension required to run UserScripts like Overleaf-Bib-Helper. Follow these steps:
-1. **Download Tampermonkey**:
-   - **Chrome**: [Chrome Web Store](https://chrome.google.com/webstore/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo)
-   - **Firefox**: [Mozilla Add-ons](https://addons.mozilla.org/en-US/firefox/addon/tampermonkey/)
-   - **Edge**: [Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/%E7%AF%A1%E6%94%B9%E7%8C%B4/iikmkjmpaadaobahmlepeloendndfphd)
-   - **Safari**: [App Store](https://apps.apple.com/us/app/tampermonkey/id1482490089) (requires macOS)
-2. **Enable Tampermonkey**:
-   - After installation, click the Tampermonkey icon in your browser’s toolbar and ensure it’s enabled.
-3. **Allow userscripts to run**:
-   - On Chrome 138+, enable **Allow User Scripts** in Tampermonkey’s extension settings, or enable extension Developer Mode. See the [official Tampermonkey instructions](https://www.tampermonkey.net/faq.php?q=Q209).
-
-### Step 2: Install Overleaf-Bib-Helper
-You can install the script in one of two ways:
-
-#### Option 1: Install from Greasy Fork (Recommended)
-1. Visit the [Greasy Fork page](https://greasyfork.org/zh-CN/scripts/532304-overleaf-bib-helper).
-2. Click the **"Install this script"** button.
-3. Tampermonkey will open a confirmation window. Click **"Install"** to add the script.
-4. The script will automatically activate on Overleaf project pages (`https://www.overleaf.com/project/*`).
-5. To keep the script updated, enable auto-updates in Tampermonkey settings.
-
-#### Option 2: Install from GitHub
-1. Go to the [GitHub repository](https://github.com/MLNLP-World/Overleaf-Bib-Helper).
-2. Open the `Overleaf-Bib-Helper.js` file in the repository.
-3. Copy the entire script content.
-4. In your browser, click the Tampermonkey icon > **"Create a new script"**.
-5. Paste the copied code into the editor, replacing the default template.
-6. Click **File > Save** in the Tampermonkey editor.
-7. The script will be active on Overleaf project pages.
-8. This script includes the canonical Greasy Fork update URLs, so manually installed copies can receive updates through Tampermonkey.
-
-## Usage
-### Opening the Tool
-1. Open an Overleaf project in your browser (`https://www.overleaf.com/project/*`).
-2. Click **Bib** on the right of the editor toolbar. When the editor toolbar is hidden, the helper uses the project toolbar.
-3. You can also press **Alt+Shift+B** or select **Open Bib Helper** from the Tampermonkey menu. Select a paper title before opening to prefill the search.
-
-
-### Searching for Articles
-1. **Enter a Query**: Type your search term (e.g., article title, author, or keywords) into the input field.
-2. **Select Search**: Choose "DBLP" or "Google Scholar" from the "Search" dropdown.
-   - **DBLP**: Best for computer science literature with structured data.
-   - **Google Scholar**: Broader coverage across various fields but may require CAPTCHA verification.
-   - With DBLP, **BibTeX → Official venue when available** retrieves the original export from supported official publication links. Choose **DBLP** to use DBLP's export instead.
-3. **Set Result Count**: Select 5, 10, 20, or 50 results from the "Results" dropdown.
-4. **Start Search**:
-   - Press the **Enter** key or click the magnifying glass icon.
-   - Expand **Search options** for versions, years, mirror, ordering, and result count. DBLP filtering and ordering apply to a bounded set of up to 200 candidates, not the entire database.
-5. Results will appear in a scrollable list below the input field.
-
-### Copying BibTeX
-1. Click **Copy** to copy an entry, or **Preview** to inspect and edit its BibTeX.
-2. In Preview, change the citation key, copy the BibTeX/key/`\cite{key}`, or download a `.bib` file.
-3. Add the entry to your project’s `.bib` file before pasting its citation command into LaTeX. The helper does not automatically modify project files.
-4. Copy and download validate the edited BibTeX; network errors and verification pages leave the clipboard unchanged.
-5. Each result and preview identifies the BibTeX source. Official exports retain their original keys and fields. A failed official request offers **Use DBLP BibTeX**, which switches the preference and searches again; it does not silently replace or copy the citation.
-6. **Open ACM preview / Open ACM & copy** opens the publisher's citation dialog in a separate tab. The helper returns the official dialog's BibTeX to Overleaf. Allow that tab to finish loading, and complete any site verification if prompted. Closing it cancels the request so you can retry.
-
 <div align="center">
-<img src="figure/ui-v2.png" width="600" alt="Bib Helper search and editable BibTeX preview" />
+
+中文 | [English](./README_en.md)
+
 </div>
 
-### Closing the Popup
-- Press **Esc** or click the toolbar icon again.
+![Overleaf-Bib-Helper](figure/Overleaf-Bib-Helper-2x.gif)
 
-## Supported Sources
-- **DBLP**: Searches across venues and supplies publication links. Search results remain limited to what DBLP has indexed; this is not a full-text search of each conference website.
-- **Google Scholar**: A broader academic search engine that may include more recent or interdisciplinary works but might require user verification (e.g., CAPTCHA).
+- **官方 BibTeX 聚合**：支持 NeurIPS、PMLR、ACL、OpenReview、CVF、ECVA/Springer、BMVC、AAAI、IJCAI、KR、ACM、IEEE；显示出处，并提供 DBLP fallback。
+- **Overleaf 无缝集成**：兼容新旧 toolbar，切换文件/布局后自动恢复 `Bib` 按钮，跟随明暗主题，小窗口可用。
+- **随手唤起，一键引用**：`Alt+Shift+B` 或菜单打开，选中标题自动带入搜索；支持 DBLP / Google Scholar 与多个镜像；可预览/编辑 BibTeX、改 key、复制 key 或 `\cite{key}`、下载 `.bib`。
+- **智能结果与版本管理**：同标题合并为 “Versions (n)”，一键 “Copy best”；DBLP 优先正式版、降权 arXiv/CoRR；支持年份过滤、排序和搜索配置（5/10/20/50 条结果）。
 
-For DBLP results, the default BibTeX preference reads these official exports:
+## 项目动机
 
-| Official source | Examples | Export |
+编写LaTeX文档通常需要包含大量的学术参考文献。手动搜索和格式化BibTeX条目可能非常耗时。Overleaf-Bib-Helper通过将DBLP和Google Scholar的搜索功能集成到Overleaf界面中，简化了这一过程，使用户能够快速找到并复制BibTeX条目，省时省力。
+
+#### 本项目包含以下功能
+**1. 多源学术检索与筛选**
+  - 支持在 Overleaf 中直接检索 DBLP 和 Google Scholar。
+  - 覆盖 AI、ML、NLP、CV 等领域的主流出版平台，包括NeurIPS、PMLR、ACL Anthology、OpenReview、CVF、ECVA/Springer、BMVC、AAAI、IJCAI、KR、ACM 和 IEEE。
+  - 提供显式 DBLP fallback，并支持多个 Google Scholar 镜像，提高可访问性。
+  - 自动合并同标题论文，并以“Versions (n)”集中展示不同版本。
+  - 支持正式发表版本优先，自动过滤或降权 arXiv/CoRR 预印本。
+  - 支持按年份筛选，并按相关性、时间等方式排序。
+  - 可配置返回5、10、20或50条检索结果。
+
+**2. BibTeX预览、编辑与导出**
+  - 展示论文引用出处及原始 BibTeX 信息。
+  - 支持 BibTeX 在线预览与编辑，并可修改 citation key。
+  - 支持一键复制 citation key、`\cite{key}` 或完整BibTeX条目。
+  - 支持下载`.bib`文件。
+  - 保存最近10次查询并缓存已验证的 BibTeX，同时保留用户的数据源偏好。
+  - 对同标题的多个版本支持一键“Copy best”，快速获取最佳引用版本。
+
+**3. Overleaf集成与便捷交互**
+  - 适配新版和旧版 Overleaf 工具栏，切换文件或布局后可自动恢复Bib按钮。
+  - 支持通过 `Alt+Shift+B` 或 Tampermonkey 菜单快速打开，并自动将选中的论文标题填入搜索框。
+  - 提供可折叠的高级检索选项和可滚动的结果列表，适配小窗口及明暗主题。
+  - 支持快捷键操作：按 Enter 搜索，按 Esc 关闭弹窗。
+
+## 更新日志
+<details> 
+<summary> <b>2026-09-07 (v2.2.1)</b> </summary>
+扩展 CVF、ECVA/Springer、已核实的 BMVC proceedings、AAAI 系列会议、IJCAI、KR、ACM、IEEE 官网原始 BibTeX。新增 DOI 路由、出版社记录匹配、旧 AAAI 页面迁移和可取消的 ACM 引用窗口 bridge；增加官网格式、历史页面与跨标签生命周期 regression tests。v2.2.0 系列仅用于本地验证。
+</details>
+
+<details>
+<summary> <b>2026-09-07 (v2.1.0)</b> </summary>
+新增 NeurIPS、PMLR、ACL Anthology、OpenReview 官网原始 BibTeX；分离检索与引用来源偏好，显示引用出处，支持显式切回 DBLP；保留官网字段并验证 URL 与发表状态。新增官方来源及请求过期 regression tests。
+</details>
+
+<details> 
+<summary> <b>2026-09-07 (v2.0.2)</b> </summary>
+
+toolbar 入口改为无边框的 **Bib** 纯文字按钮，保留键盘操作时的焦点提示。
+</details>
+
+<details>
+<summary> <b>2026-09-07 (v2.0.1)</b> </summary>
+适配新版 toolbar，支持布局切换后恢复入口；移除外部运行依赖；新增快捷键、menu、选中文字搜索、最近查询、BibTeX preview/edit/key/citation/download；增加 timeout、HTTP 与 BibTeX 验证、过期搜索保护、Scholar origin 固定和显式验证入口；修复多语言分组与 Hide preprints 筛选。新增 Playwright regression tests 和 GitHub Actions。
+</details>
+
+<details>
+<summary> <b>2026-02-03</b> </summary>
+代码清理与重构，使用 MutationObserver 进行注入（减少轮询），并放宽 `@connect` 以支持自定义 Scholar 镜像（v1.8）。
+</details>
+
+<details>
+<summary> <b>2026-02-03</b> </summary>
+Overleaf 主题配色的全新 UI、默认使用 Google Scholar、同标题结果合并为 “Versions (n)” 版本选择、增加镜像选择并支持结果分页（超过 10 条可继续获取），并提供排序/年份范围过滤与 DBLP 版本偏好（优先正式发表版本，过滤/降权 arXiv/CoRR）（v1.7）。
+</details>
+
+<details>
+<summary> <b>2025-04-10</b> </summary>
+增加了对 cn.overleaf.com 和 cn.overleaf.com 域的支持（v1.2）。
+</details>
+
+<details>
+<summary> <b>2025-04-09</b> </summary>
+初始版本，支持DBLP和Google Scholar的基本功能（v1.1）。
+</details>
+
+## 快速开始
+
+### 第一步：安装Tampermonkey
+Tampermonkey是一个运行Overleaf-Bib-Helper等用户脚本所需的浏览器扩展。按照以下步骤操作：
+1. **下载Tampermonkey**：
+   - **Chrome**：[Chrome网上商店](https://chrome.google.com/webstore/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo)
+   - **Firefox**：[Mozilla插件](https://addons.mozilla.org/en-US/firefox/addon/tampermonkey/)
+   - **Edge**：[Microsoft Edge插件](https://microsoftedge.microsoft.com/addons/detail/%E7%AF%A1%E6%94%B9%E7%8C%B4/iikmkjmpaadaobahmlepeloendndfphd)
+   - **Safari**：[应用商店](https://apps.apple.com/us/app/tampermonkey/id1482490089)（需要macOS）
+2. **启用Tampermonkey**：
+   - 安装完成后，点击浏览器工具栏中的Tampermonkey图标，确保其已启用。
+3. **允许运行 userscripts**：
+   - Chrome 138+ 可在 Tampermonkey 的扩展管理页开启 **Allow User Scripts（允许用户脚本）**；也可开启扩展开发者模式。见 [Tampermonkey 官方说明](https://www.tampermonkey.net/faq.php?q=Q209)。
+
+### 第二步：安装Overleaf-Bib-Helper
+您可以通过以下两种方式之一安装脚本：
+
+#### 选项1：从Greasy Fork安装（推荐）
+1. 访问[Greasy Fork页面](https://greasyfork.org/zh-CN/scripts/532304-overleaf-bib-helper)。
+2. 点击**“安装此脚本”**按钮。
+3. Tampermonkey将打开一个确认窗口。点击**“安装”**以添加脚本。
+4. 脚本将在Overleaf项目页面（`https://www.overleaf.com/project/*`）上自动激活。
+5. 为保持脚本更新，请在Tampermonkey设置中启用自动更新。
+
+#### 选项2：从GitHub安装
+1. 前往[GitHub仓库](https://github.com/MLNLP-World/Overleaf-Bib-Helper)。
+2. 打开仓库中的`Overleaf-Bib-Helper.js`文件。
+3. 复制整个脚本内容。
+4. 在浏览器中，点击Tampermonkey图标 > **“创建新脚本”**。
+5. 将复制的代码粘贴到编辑器中，替换默认模板。
+6. 在Tampermonkey编辑器中点击**文件 > 保存**。
+7. 脚本将在Overleaf项目页面上激活。
+8. 脚本包含 Greasy Fork 的正式更新地址，从 GitHub 手动安装也可通过 Tampermonkey 接收后续更新。
+
+## 使用方法
+### 打开工具
+1. 在浏览器中打开Overleaf项目（`https://www.overleaf.com/project/*`）。
+2. 点击 editor toolbar 右侧的 **Bib** 按钮；editor toolbar 不可见时，按钮会使用项目顶栏。
+3. 也可按 **Alt+Shift+B**，或从 Tampermonkey menu 选择 **Open Bib Helper**。选中论文标题后打开，会自动填入搜索框。
+
+
+### 搜索文章
+1. **输入查询**：在输入字段中键入搜索词（例如文章标题、作者或关键词）。
+2. **选择 Search**：从“Search”下拉菜单中选择“DBLP”或“Google Scholar”。
+   - **DBLP**：最适合计算机科学文献，提供结构化数据。
+   - **Google Scholar**：覆盖更广泛的领域，但可能需要验证码验证。
+   - 使用 DBLP 时，**BibTeX → Official venue when available** 会从已支持的官方论文链接获取原始引用；选择 **DBLP** 则使用 DBLP 的导出。
+3. **设置结果数量**：从“结果”下拉菜单中选择5、10、20或50个结果。
+4. **开始搜索**：
+   - 按下**Enter**键或点击放大镜图标。
+   - 展开 **Search options** 设置版本、年份、mirror、排序和结果数。DBLP 的筛选与排序作用于最多 200 条候选结果，并非整个数据库。
+5. 结果将显示在输入字段下方的可滚动列表中。
+
+### 复制BibTeX
+1. 点击 **Copy** 复制条目，或 **Preview** 查看并编辑 BibTeX。
+2. Preview 中可修改 citation key，复制 BibTeX、key、`\cite{key}`，或下载 `.bib` 文件。
+3. 先把条目加入项目的 `.bib` 文件，再将 citation command 粘贴到 LaTeX 文档。脚本不会自动修改项目文件。
+4. 预览中的复制和下载会验证 BibTeX；网络错误或验证码页面不会覆盖剪贴板。
+5. 结果与 preview 会标明 BibTeX 来源，保留官网原始 citation key 和字段。官网读取失败时可点击 **Use DBLP BibTeX** 切换偏好并重新搜索；不会静默替换或自动复制另一来源的引用。
+
+<!-- <div align="center">
+<img src="figure/ui-v2.png" width="600" alt="Bib Helper search and editable BibTeX preview" />
+</div> -->
+
+### 关闭弹出窗口
+- 按下**Esc**键或再次点击工具栏图标。
+
+## 支持的来源
+- **DBLP**：跨会议检索论文并提供正式出版链接。搜索范围仍受 DBLP 收录情况限制，不是直接对各会议官网做全文搜索。
+- **Google Scholar**：一个更广泛的学术搜索引擎，可能包括更多最新或跨学科的作品，但可能需要用户验证（例如验证码）。
+
+对 DBLP 结果，默认 BibTeX 偏好可读取以下官网导出：
+
+| 官网来源 | 覆盖示例 | 获取方式 |
 | --- | --- | --- |
-| [NeurIPS proceedings](https://proceedings.neurips.cc/) | NeurIPS / NIPS | The paper page's Bibtex link, including older proceedings and newer tracks |
-| [PMLR](https://proceedings.mlr.press/) | ICML, AISTATS, COLT, UAI, CoRL | Original BibTeX embedded in the paper page |
-| [ACL Anthology](https://aclanthology.org/info/ids/) | ACL, EMNLP, NAACL, EACL, COLING, IJCNLP, LREC, Findings | Official `.bib` export, including legacy IDs |
-| [OpenReview](https://github.com/openreview/openreview-web/blob/master/components/forum/ForumNote.js) | ICLR, COLM, and other indexed proceedings | The official API's `_bibtex`; publication status is checked |
-| [CVF Open Access](https://openaccess.thecvf.com/) | CVPR, ICCV, WACV, ACCV, their workshops, ECCV 2018 | Original BibTeX block; modern and historical paper/PDF links |
-| [ECVA](https://www.ecva.net/papers.php) / [Springer](https://link.springer.com/) | ECCV, ACCV, MICCAI, ECML PKDD and other Springer proceedings | Publisher BibTeX export; ECVA resolves the paper's actual Springer link |
-| [BMVA / BMVC](https://www.bmva.org/bmvc) | BMVC 2023–2025 and archived 2015–2017 proceedings | Original citation block on verified paper pages |
-| [AAAI OJS](https://ojs.aaai.org/) | AAAI, ICAPS, ICWSM, AIIDE, AIES, HCOMP, SoCS, AAAI-SS | The paper's actual BibTeX download link; migrated legacy pages resolve through their official DOI |
-| [IJCAI](https://www.ijcai.org/proceedings/) | IJCAI proceedings from 2017 | Original per-paper BibTeX export |
-| [KR](https://proceedings.kr.org/) | KR proceedings | The official paper's BibTeX link |
-| [ACM Digital Library](https://dl.acm.org/) | KDD, WWW, SIGIR, CIKM, WSDM, ACM MM, AAMAS papers with ACM links | Reads the official citation dialog in a temporary publisher tab |
-| [IEEE Xplore](https://ieeexplore.ieee.org/) | ICDM, ICASSP, ICIP, IJCNN, ICDE and other IEEE proceedings | Original BibTeX download; subject to publisher verification/access |
+| [NeurIPS proceedings](https://proceedings.neurips.cc/) | NeurIPS / NIPS | 读取论文页实际提供的 BibTex 链接，兼容旧年份与新版 tracks |
+| [PMLR](https://proceedings.mlr.press/) | ICML、AISTATS、COLT、UAI、CoRL | 读取论文页内的原始 BibTeX |
+| [ACL Anthology](https://aclanthology.org/info/ids/) | ACL、EMNLP、NAACL、EACL、COLING、IJCNLP、LREC、Findings | 官方 `.bib` 文件，兼容旧版 ID |
+| [OpenReview](https://github.com/openreview/openreview-web/blob/master/components/forum/ForumNote.js) | ICLR、COLM 等已收录 proceedings | 读取官方 API 的 `_bibtex`，并核对发表状态 |
+| [CVF Open Access](https://openaccess.thecvf.com/) | CVPR、ICCV、WACV、ACCV、相关 workshops、ECCV 2018 | 读取原始 BibTeX block，识别新版和历史论文/PDF 链接 |
+| [ECVA](https://www.ecva.net/papers.php) / [Springer](https://link.springer.com/) | ECCV、ACCV、MICCAI、ECML PKDD 等 Springer proceedings | 读取出版社 BibTeX；ECVA 使用论文页实际提供的 Springer 链接 |
+| [BMVA / BMVC](https://www.bmva.org/bmvc) | BMVC 2023–2025、归档的 2015–2017 | 读取已核实论文页面的原始 citation block |
+| [AAAI OJS](https://ojs.aaai.org/) | AAAI、ICAPS、ICWSM、AIIDE、AIES、HCOMP、SoCS、AAAI-SS | 使用论文实际的 BibTeX 下载链接；旧版页面通过官方 DOI 解析迁移后的记录 |
+| [IJCAI](https://www.ijcai.org/proceedings/) | 2017 年起的 IJCAI proceedings | 官网单篇 BibTeX export |
+| [KR](https://proceedings.kr.org/) | KR proceedings | 读取官方论文页提供的 BibTeX 链接 |
+| [ACM Digital Library](https://dl.acm.org/) | KDD、WWW、SIGIR、CIKM、WSDM、ACM MM，以及有 ACM 链接的 AAMAS 论文 | 打开临时出版社标签，读取官网引用窗口实际生成的 BibTeX |
+| [IEEE Xplore](https://ieeexplore.ieee.org/) | ICDM、ICASSP、ICIP、IJCNN、ICDE 等 IEEE proceedings | 官网原始 BibTeX 下载，受出版社验证与访问限制影响 |
 
-Coverage follows the publication link and available official export, not just a venue name: it does not guarantee every year, track, or paper. DOI links are recognized for supported publishers. CVF is preferred over IEEE when both identify the same result. Unsupported links, PDF-only historical proceedings, and preprints use DBLP and are labeled accordingly. BMVC years outside the verified list and pre-2017 IJCAI currently use DBLP unless another supported publisher link is available.
+支持范围取决于论文的出版链接和官网是否提供 export，不能仅凭会议名称保证每个年份、track 和论文都可用。支持已接入出版社的 DOI 链接；同一结果同时提供 CVF 与 IEEE 时优先 CVF。不支持的链接、只有 PDF 的历史 proceedings 和 preprint 使用 DBLP，并明确标注。已列范围外的 BMVC 年份、2017 年前的 IJCAI 暂用 DBLP，除非存在其他已支持的出版社链接。
 
-The helper preserves the publisher's keys, fields, and publication year, including cases where the proceedings year differs from the conference year. OpenReview notes without an official export, or marked submitted/rejected/withdrawn, are not accepted as published conference citations. Some publishers require browser verification; the error provides an official-page action and an explicit DBLP choice. IEEE's successful export format is regression-tested against its published download contract; live requests were restricted during validation, so availability cannot be guaranteed.
+脚本保留出版社原有的 key、字段与出版年份，包括出版年份与会议年份不同的情况。OpenReview 缺少官方 export，或标记为 submitted/rejected/withdrawn 的引用不会被当成正式会议版本。部分出版社可能要求浏览器验证；出错时可打开官方页面或显式切回 DBLP。IEEE 的成功导出格式已根据官网公开下载接口做 regression tests，但 live 请求在验证时受到限制，不能保证始终可访问。
 
-For ACM, the script also runs on `dl.acm.org/doi/*` solely to answer a short-lived request started from Overleaf. Normal ACM visits remain unchanged. Bibliographic fields are not reconstructed from CSL or Crossref, and no publisher renderer is bundled.
+对于 ACM，点击 **Open ACM preview / Open ACM & copy** 后，等待新标签中的官方引用窗口完成加载；若官网要求验证，完成后继续。关闭标签会取消请求，可立即重试。脚本新增的 `dl.acm.org/doi/*` 范围仅用于响应从 Overleaf 发起的短时请求，普通 ACM 访问不会触发动作；不从 CSL 或 Crossref 重组引用，也不打包出版社 renderer。
 
-## Troubleshooting
-- **Script Not Working?**
-  - Allow Tampermonkey to run userscripts using **Allow User Scripts** or extension **Developer Mode**.
-  - If the Bib button is missing, try **Alt+Shift+B** or the Tampermonkey menu and verify that you have v2.2.1 installed.
-  - Ensure Tampermonkey is enabled and the script is active.
-  - Verify you’re on an Overleaf project page.
-  - Reload or reinstall from Greasy Fork.
-- **No Results?**
-  - Check your query for typos.
-  - Ensure you have granted the plugin search permissions.
-  - Try switching between DBLP and Google Scholar.
-  - DBLP may also show a browser verification page. Use **Open verification page**, allow the site to complete its check, and retry.
-- **Google Scholar Issues?**
-  - Click **Open verification page** in the helper, complete verification in that tab, and retry; or choose **Search DBLP instead**.
-  - Scholar may restrict automated requests even when its homepage loads. Switch mirrors or use the Source link to obtain the citation manually.
+## 故障排除
 
-## Disclaimer
-While Overleaf-Bib-Helper aims to provide a seamless experience, please note that it relies on external services (DBLP and Google Scholar) which may change their APIs or require user verification (e.g., CAPTCHA). Use this tool at your own discretion and always verify retrieved BibTeX entries before including them in your documents.
+<details>
+<summary> <b>脚本不起作用？</b> </summary>
 
-## Changelog
-- **2026-09-07 (v2.2.1)**: Expanded original official BibTeX to CVF, ECVA/Springer, verified BMVC proceedings, AAAI-family venues, IJCAI, KR, ACM, and IEEE. Added DOI routing, publisher identity validation, legacy AAAI migration, and a cancellable ACM citation-dialog bridge. Added provider, historical-format, and cross-tab lifecycle regression tests. v2.2.0 builds were used only for local verification.
-- **2026-09-07 (v2.1.0)**: Added original official BibTeX retrieval from NeurIPS, PMLR, ACL Anthology, and OpenReview; separate search and citation-source preferences; citation provenance; explicit DBLP fallback; original-field preservation and publication/URL validation. Added official-provider and request-race regression coverage.
-- **2026-09-07 (v2.0.2)**: Simplified the toolbar launcher to borderless **Bib** text, preserving keyboard focus visibility.
-- **2026-09-07 (v2.0.1)**: Current toolbar compatibility and layout recovery; dependency-free startup; shortcut/menu/selection search; recent queries; BibTeX preview/edit/key/citation/download; request timeouts, HTTP/BibTeX validation, stale-search protection, pinned Scholar origins and explicit verification actions; Unicode grouping and strict Hide preprints. Added Playwright regression coverage and GitHub Actions.
-- **2026-02-03**: Code cleanup, MutationObserver-based injection, expanded `@connect` for custom Scholar mirrors (v1.8).
-- **2026-02-03**: Overleaf-themed UI, Google Scholar as default, grouped “Versions (n)” results, mirror selector + pagination, plus ordering & year-range filters and DBLP version preference (v1.7).
-- **2025-04-10**: Added support for cn.overleaf.com and cn.overleaf.com domains (v1.2).
-- **2025-04-09**: Initial release with basic functionality for DBLP and Google Scholar (v1.1).
+- 确保 Tampermonkey 已获允许运行 userscripts；Chrome 可开启 **Allow User Scripts** 或 **开发者模式**。
+- 若 Bib 按钮没有显示，尝试 **Alt+Shift+B** 或 Tampermonkey menu，并确认已更新到 v2.2.1。
+- 确保Tampermonkey已启用且脚本处于活动状态。
+- 确认您在Overleaf项目页面上。
+- 重新加载或从Greasy Fork重新安装。
 
-## License
-This project is licensed under the MIT License - see [LICENSE](LICENSE) for details.
+</details>
 
-## Contributing
-Feel free to fork the [GitHub repository](https://github.com/MLNLP-World/Overleaf-Bib-Helper), submit issues, or create pull requests with improvements!
+<details>
+<summary> <b>没有结果？</b> </summary>
 
-## Development and validation
-The userscript remains a single file with no build step. Tests run in an isolated browser with mocked network responses and do not access real paper projects.
+- 检查查询是否有拼写错误。
+- 确保你对插件搜索权限进行了授权。
+- 尝试在DBLP和Google Scholar之间切换。
+- DBLP 也可能要求浏览器验证。点击 **Open verification page**，等待网站完成检查后重试。
+</details>
+
+<details>
+<summary> <b>Google Scholar 问题？</b> </summary>
+
+- 点击面板中的 **Open verification page**，在新标签中完成验证后重试；也可点击 **Search DBLP instead**。
+- Scholar 可能限制自动请求；网页能打开不保证 BibTeX export 可用。可切换 mirror，或从 Source 链接手动获取引用。
+</details>
+
+<!-- ## 许可证
+此项目采用MIT许可证 - 详情见[LICENSE](LICENSE)。 -->
+
+
+<!-- ## 开发与验证
+脚本保持单文件，无需 build。测试使用独立浏览器和模拟的网络响应，不访问实际论文项目。
 
 ```sh
 npm ci
@@ -208,13 +262,25 @@ npx playwright install chromium
 npm test
 ```
 
-To reuse locally installed Google Chrome, run `PW_USE_SYSTEM_CHROME=1 npm test`. GitHub Actions runs the same suite on pushes and pull requests.
+本机已有 Google Chrome 时，可用 `PW_USE_SYSTEM_CHROME=1 npm test`。GitHub Actions 对 push 和 pull request 运行同一套测试。 -->
 
-## Contact
-Please email [Xunjian Yin](mailto:xjyin@pku.edu.cn) or create Github issues here if you have any questions or suggestions.
+## 免责声明
+虽然Overleaf-Bib-Helper旨在提供无缝体验，但请注意，它依赖于外部服务（DBLP和Google Scholar），这些服务的API可能会更改或需要用户验证（例如验证码）。请自行决定是否使用此工具，并始终在将检索到的BibTeX条目纳入文档前进行验证。
 
-## Organizers
-<a href="https://github.com/Arvid-pku">  <img src="https://avatars.githubusercontent.com/u/53811705?s=96&v=4"  width="55" > </a>
+## 反馈和贡献
+如有任何问题或建议，请发送电子邮件至[Xunjian Yin](mailto:xjyin@pku.edu.cn)或在此处创建Github问题。也欢迎分叉[GitHub仓库](https://github.com/MLNLP-World/Overleaf-Bib-Helper)，提交问题或创建改进的拉取请求！
 
-## Acknowledgments
-Inspired by similar tools and the academic community’s need for efficient reference management.
+## 致谢
+### 组织者列表
+感谢以下同学对本项目进行组织与指导：
+
+<a href="https://github.com/Arvid-pku"> <img src="https://images.weserv.nl/?url=github.com/Arvid-pku.png?v=4&mask=circle" width="60"> </a>
+
+### 贡献者列表
+感谢以下同学对本项目的支持与贡献：
+
+<a href="https://github.com/Arvid-pku"> <img src="https://images.weserv.nl/?url=github.com/Arvid-pku.png?v=4&mask=circle" width="60"> </a>
+&nbsp;
+<a href="https://github.com/QAbot-zh">  <img src="https://images.weserv.nl/?url=github.com/QAbot-zh.png?v=4&mask=circle"  width="60" > </a>
+&nbsp;
+<a href="https://github.com/WPENGxs">  <img src="https://images.weserv.nl/?url=github.com/WPENGxs.png?v=4&mask=circle"  width="60" > </a>
