@@ -51,7 +51,7 @@
 
 </div>
 
-![Overleaf-Bib-Helper](figure\Overleaf-Bib-Helper-2x.gif)
+![Overleaf-Bib-Helper](figure/Overleaf-Bib-Helper-2x.gif)
 
 - **Official BibTeX aggregation**: Covers NeurIPS, PMLR, ACL, OpenReview, CVF, ECVA/Springer, BMVC, AAAI, IJCAI, KR, ACM, IEEE; shows provenance + DBLP fallback.
 - **Seamless Overleaf integration**: Supports old/new toolbars, auto-restores `Bib` after file/layout switches, follows light/dark themes, works in small windows.
