@@ -1,13 +1,11 @@
 // ==UserScript==
-// @name         Overleaf-Bib-Helper
-// @namespace    com.Xunjian.overleaf
-// @version      2.2.1
-// @description  Search papers in Overleaf and retrieve original BibTeX from conference websites, DBLP, or Google Scholar
-// @author       Xunjian Yin
+// @name         Overleaf Research Bib Toolkit
+// @namespace    com.Xunjian.overleaf.merged
+// @version      4.2.0
+// @description  Unified Overleaf paper search, BibTeX retrieval, project bibliography manager, and citation hover previews with copy actions
+// @author       Xunjian Yin (Bib Helper) + merged citation-preview enhancements
 // @match        https://www.overleaf.com/project/*
 // @match        https://overleaf.com/project/*
-// @match        https://cn.overleaf.com/project*
-// @match        https://latex.pku.edu.cn/project/*
 // @match        https://dl.acm.org/doi/*
 // @icon         https://www.overleaf.com/favicon.ico
 // @run-at       document-idle
@@ -24,8 +22,6 @@
 // @grant        GM_deleteValue
 // @homepageURL  https://github.com/MLNLP-World/Overleaf-Bib-Helper
 // @supportURL   https://github.com/MLNLP-World/Overleaf-Bib-Helper/issues
-// @downloadURL  https://update.greasyfork.org/scripts/532304/Overleaf-Bib-Helper.user.js
-// @updateURL    https://update.greasyfork.org/scripts/532304/Overleaf-Bib-Helper.meta.js
 // @connect      *
 // @license      MIT
 // ==/UserScript==
@@ -40,6 +36,18 @@ let previewSequence = 0;
 let copySequence = 0;
 let focusBeforePopup = null;
 const bibCache = new Map();
+const citationSourceCache = new Map();
+
+// Project-local citation hover library. The legacy localStorage key is kept so
+// previously pasted bibliographies from the standalone hover script continue to work.
+const CITATION_STORAGE_PREFIX = 'overleaf_bib_preview_';
+const CITATION_RAW_SUFFIX = '_raw';
+let citationDatabase = {};
+let citationRawBib = '';
+let citationHoverCard = null;
+let citationHideTimer = null;
+let citationHoveringCard = false;
+let citationHoverSignature = '';
 const OFFICIAL_BIB_LABELS = Object.freeze({
     NeurIPS: 'NeurIPS proceedings',
     PMLR: 'PMLR',
@@ -69,9 +77,6 @@ const TOOLBAR_SELECTORS = [
 
 const DEFAULT_SCHOLAR_ORIGINS = [
     "https://scholar.google.com",
-    "https://scholar.google.com.hk",
-    "https://scholar.lanfanshu.cn",
-    "https://xs.vygc.top",
 ];
 
 const FALLBACK_BRAND_RGB = { r: 19, g: 138, b: 7 }; // Overleaf green
@@ -576,6 +581,203 @@ function injectObhStyles() {
             background: transparent;
         }
 
+        .obh-tabs {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4px;
+            padding: 4px;
+            margin-bottom: 10px;
+            border: 1px solid var(--obh-border);
+            border-radius: 10px;
+            background: var(--obh-surface);
+        }
+
+        .obh-tab {
+            min-height: 32px;
+            border: 0;
+            border-radius: 7px;
+            background: transparent;
+            color: var(--obh-muted);
+            font-size: 12px;
+            font-weight: 650;
+            cursor: pointer;
+        }
+
+        .obh-tab:hover {
+            color: var(--obh-fg);
+            background: var(--obh-hover);
+        }
+
+        .obh-tab[aria-selected="true"] {
+            color: white;
+            background: var(--obh-accent);
+        }
+
+        .obh-tab-panel[hidden] { display: none !important; }
+
+        .obh-library-card {
+            padding: 11px;
+            border: 1px solid var(--obh-border);
+            border-radius: 10px;
+            background: var(--obh-surface);
+        }
+
+        .obh-library-heading {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
+        .obh-library-heading strong {
+            font-size: 12.5px;
+        }
+
+        .obh-library-help {
+            margin-top: 3px;
+            color: var(--obh-muted);
+            font-size: 11px;
+            line-height: 1.4;
+        }
+
+        .obh-library-count {
+            flex: 0 0 auto;
+            padding: 3px 7px;
+            border-radius: 999px;
+            background: var(--obh-accent-weak);
+            color: var(--obh-accent);
+            font-size: 11px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .obh-library-textarea {
+            width: 100%;
+            height: 280px;
+            resize: vertical;
+            padding: 9px 10px;
+            border: 1px solid var(--obh-border);
+            border-radius: 8px;
+            background: var(--obh-input-bg);
+            color: var(--obh-fg);
+            font: 11.5px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace;
+        }
+
+        .obh-library-textarea:focus {
+            outline: none;
+            border-color: var(--obh-accent);
+            box-shadow: 0 0 0 3px var(--obh-accent-weak);
+        }
+
+        .obh-library-actions {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            margin-top: 8px;
+            flex-wrap: wrap;
+        }
+
+        .obh-button-row {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .obh-secondary-button, .obh-danger-button {
+            min-height: 31px;
+            padding: 0 10px;
+            border-radius: 7px;
+            border: 1px solid var(--obh-border);
+            background: var(--obh-input-bg);
+            color: var(--obh-fg);
+            font-size: 11.5px;
+            cursor: pointer;
+        }
+
+        .obh-secondary-button:hover {
+            border-color: var(--obh-accent);
+            background: var(--obh-hover);
+        }
+
+        .obh-danger-button { color: var(--obh-danger); }
+        .obh-danger-button:hover { background: rgba(180, 35, 24, 0.08); }
+
+        .obh-save-button {
+            min-height: 31px;
+            padding: 0 12px;
+            border: 1px solid transparent;
+            border-radius: 7px;
+            background: var(--obh-accent);
+            color: white;
+            font-size: 11.5px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .obh-tip {
+            margin-top: 9px;
+            padding: 8px 9px;
+            border-radius: 8px;
+            background: var(--obh-accent-weak);
+            color: var(--obh-fg);
+            font-size: 11px;
+            line-height: 1.4;
+        }
+
+        #obh-citation-hover {
+            position: fixed;
+            z-index: 2147483647;
+            display: none;
+            width: min(460px, calc(100vw - 20px));
+            max-height: min(520px, calc(100vh - 20px));
+            overflow: auto;
+            padding: 0;
+            background: #111827;
+            color: #f3f4f6;
+            border: 1px solid rgba(255,255,255,.16);
+            border-radius: 10px;
+            box-shadow: 0 16px 42px rgba(0,0,0,.42);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        #obh-citation-hover * { box-sizing: border-box; }
+        .obh-cite-entry { padding: 11px 12px; }
+        .obh-cite-entry + .obh-cite-entry { border-top: 1px solid rgba(255,255,255,.12); }
+        .obh-cite-key { color: #93c5fd; font: 600 11px/1.3 ui-monospace, SFMono-Regular, Consolas, monospace; margin-bottom: 5px; }
+        .obh-cite-authors { color: #f9fafb; font-weight: 650; margin-bottom: 3px; }
+        .obh-cite-title-button {
+            display: block;
+            width: 100%;
+            padding: 0;
+            border: 0;
+            background: transparent;
+            color: #f3f4f6;
+            text-align: left;
+            font: italic 12px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            cursor: pointer;
+        }
+        .obh-cite-title-button:hover { color: #93c5fd; text-decoration: underline; }
+        .obh-cite-title-static { color: #f3f4f6; font-style: italic; }
+        .obh-cite-meta { color: #9ca3af; margin-top: 4px; }
+        .obh-cite-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+        .obh-cite-action {
+            min-height: 27px;
+            padding: 0 8px;
+            border: 1px solid rgba(255,255,255,.16);
+            border-radius: 6px;
+            background: rgba(255,255,255,.06);
+            color: #e5e7eb;
+            font-size: 11px;
+            cursor: pointer;
+        }
+        .obh-cite-action:hover { border-color: #60a5fa; background: rgba(96,165,250,.12); }
+        .obh-cite-source { color: #93c5fd; }
+        .obh-cite-missing { color: #fca5a5; }
+
         .obh-footer {
             margin-top: 10px;
             display: flex;
@@ -631,8 +833,11 @@ function setCurrentScholarOrigin(origin) {
     injectObhStyles();
     registerGlobalShortcuts();
     if (typeof GM_registerMenuCommand === 'function') {
-        GM_registerMenuCommand('Open Bib Helper (Alt+Shift+B)', openHelper);
+        GM_registerMenuCommand('Open Bib Toolkit (Alt+Shift+B)', openHelper);
+        GM_registerMenuCommand('Manage project BibTeX', () => openHelper('library'));
     }
+    loadCitationLibrary();
+    initCitationHoverPreview();
     startInjectionWatcher();
 })();
 
@@ -746,6 +951,10 @@ function injectUi(toolbar) {
 
 function bindPopupEvents(popup) {
     popup.querySelector('#obh-close').onclick = () => togglePopup(popup, false);
+    popup.querySelector('#obh-tab-search').onclick = () => setToolTab(popup, 'search');
+    popup.querySelector('#obh-tab-library').onclick = () => setToolTab(popup, 'library');
+    popup.querySelector('#obh-library-save').onclick = () => saveCitationLibraryFromUI(popup);
+    popup.querySelector('#obh-library-clear').onclick = () => clearCitationLibraryFromUI(popup);
     popup.querySelector('#obh-search-word').onclick = () => queryArticle();
     popup.querySelector('#obh-search-input').onkeydown = (event) => {
         if (event.key === 'Enter' && !event.isComposing) {
@@ -802,9 +1011,11 @@ function bindPopupEvents(popup) {
     popup.querySelector('#obh-download-bib').onclick = downloadPreview;
 }
 
-function openHelper() {
+function openHelper(tab) {
     ensureInjected();
-    togglePopup(getPopup(), true);
+    const popup = getPopup();
+    if (tab === 'search' || tab === 'library') setToolTab(popup, tab, false);
+    togglePopup(popup, true);
 }
 
 function togglePopup(popup, visible = !showBox, restoreFocus = true) {
@@ -827,10 +1038,17 @@ function togglePopup(popup, visible = !showBox, restoreFocus = true) {
         const editor = Array.from(document.querySelectorAll('.cm-editor')).find(isVisible);
         const background = editor ? parseCssColorToRgb(getComputedStyle(editor).backgroundColor) : null;
         popup.dataset.theme = background && (background.r * 0.299 + background.g * 0.587 + background.b * 0.114) < 128 ? 'dark' : 'light';
+        const activeTab = GM_getValue('ui.activeTab', 'search') === 'library' ? 'library' : 'search';
+        setToolTab(popup, activeTab, false);
         positionPopup();
-        const input = popup.querySelector('#obh-search-input');
-        input.focus();
-        input.select();
+        if (activeTab === 'search') {
+            const input = popup.querySelector('#obh-search-input');
+            input.focus();
+            input.select();
+        } else {
+            const area = popup.querySelector('#obh-library-textarea');
+            area.focus();
+        }
     } else if (restoreFocus && isVisible(focusBeforePopup)) {
         focusBeforePopup.focus();
     }
@@ -937,8 +1155,8 @@ function createToggleIcon() {
     iconBox.style.justifyContent = 'center';
     iconBox.style.alignItems = 'center';
     iconBox.id = 'obh-toggle-icon';
-    iconBox.title = 'Overleaf Bib Helper (Alt+Shift+B)';
-    iconBox.setAttribute('aria-label', 'Overleaf Bib Helper');
+    iconBox.title = 'Overleaf Bib Toolkit (Alt+Shift+B)';
+    iconBox.setAttribute('aria-label', 'Overleaf Bib Toolkit');
     iconBox.setAttribute('aria-controls', 'obh-popup');
     iconBox.setAttribute('aria-expanded', String(showBox));
     iconBox.setAttribute('aria-haspopup', 'dialog');
@@ -951,13 +1169,13 @@ function createBox() {
     box.id = 'obh-popup';
     box.className = 'obh-popup';
     box.setAttribute('role', 'dialog');
-    box.setAttribute('aria-label', 'Overleaf Bib Helper');
+    box.setAttribute('aria-label', 'Overleaf Bib Toolkit');
     box.innerHTML = `
         <div class="obh-header">
             <div class="obh-brand">
                 <div style="min-width:0;">
-                    <div class="obh-title">Bib Helper</div>
-                    <div class="obh-subtitle">Search & copy BibTeX in Overleaf</div>
+                    <div class="obh-title">Bib Toolkit</div>
+                    <div class="obh-subtitle">Search papers · manage BibTeX · inspect citations</div>
                 </div>
             </div>
             <button id="obh-close" class="obh-icon-button" type="button" aria-label="Close">
@@ -967,6 +1185,12 @@ function createBox() {
             </button>
         </div>
 
+        <div class="obh-tabs" role="tablist" aria-label="Bib Toolkit views">
+            <button id="obh-tab-search" class="obh-tab" type="button" role="tab" aria-selected="true" aria-controls="obh-search-panel">Search papers</button>
+            <button id="obh-tab-library" class="obh-tab" type="button" role="tab" aria-selected="false" aria-controls="obh-library-panel">My BibTeX</button>
+        </div>
+
+        <div id="obh-search-panel" class="obh-tab-panel" role="tabpanel" aria-labelledby="obh-tab-search">
         <div class="obh-search-row">
             <input id="obh-search-input" class="obh-search-input" aria-label="Search papers" placeholder="Title, author, keywords" autocomplete="off" list="obh-recent-queries" />
             <datalist id="obh-recent-queries"></datalist>
@@ -1058,9 +1282,36 @@ function createBox() {
             </div>
             <div id="obh-preview-status" class="obh-status" role="status" aria-live="polite"></div>
         </section>
+        </div>
+
+        <div id="obh-library-panel" class="obh-tab-panel" role="tabpanel" aria-labelledby="obh-tab-library" hidden>
+            <div class="obh-library-card">
+                <div class="obh-library-heading">
+                    <div>
+                        <strong>Project bibliography</strong>
+                        <div class="obh-library-help">Paste the complete contents of your .bib file. It is stored only for this Overleaf project and powers citation hover previews.</div>
+                    </div>
+                    <span id="obh-library-count" class="obh-library-count">0 entries</span>
+                </div>
+                <textarea id="obh-library-textarea" class="obh-library-textarea" spellcheck="false" placeholder="@inproceedings{key,
+  author = {...},
+  title = {...},
+  ...
+}"></textarea>
+                <div class="obh-library-actions">
+                    <div class="obh-button-row">
+                        <button id="obh-library-save" class="obh-save-button" type="button">Parse & save</button>
+                        <button id="obh-library-clear" class="obh-danger-button" type="button">Clear saved</button>
+                    </div>
+                    <span id="obh-library-project" class="obh-library-help"></span>
+                </div>
+                <div id="obh-library-status" class="obh-status" role="status" aria-live="polite"></div>
+                <div class="obh-tip"><strong>Hover a citation:</strong> move the pointer over <code>\cite{key}</code> in the editor. The card shows authors, title, venue, and year, with quick actions to <strong>Copy title</strong> or copy the citation command.</div>
+            </div>
+        </div>
 
         <div class="obh-footer">
-            <span>Alt+Shift+B: open · Enter: search</span>
+            <span>Alt+Shift+B: open toolkit · Enter: search</span>
             <span>Esc: close</span>
         </div>
     `;
@@ -1175,6 +1426,8 @@ function createBox() {
         ? 'Scholar may require verification. Use the verification link on errors, or switch to DBLP.'
         : 'Find papers with DBLP; use original BibTeX from supported official venues. Each result shows its citation source.');
 
+    refreshCitationLibraryUI(box);
+    setToolTab(box, GM_getValue('ui.activeTab', 'search'), false);
     return box;
 }
 
@@ -2527,6 +2780,587 @@ async function getBibTexOpenReview(forumURL) {
         throw new Error('OpenReview’s BibTeX points to a different paper.');
     }
     return bib;
+}
+
+
+// -----------------------------------------------------------------------------
+// Project BibTeX library + interactive citation hover preview
+// -----------------------------------------------------------------------------
+
+function getOverleafProjectId() {
+    const match = location.pathname.match(/\/project\/([^/]+)/);
+    return match ? match[1] : 'default';
+}
+
+function citationStorageKey() {
+    return CITATION_STORAGE_PREFIX + getOverleafProjectId();
+}
+
+function citationRawStorageKey() {
+    return citationStorageKey() + CITATION_RAW_SUFFIX;
+}
+
+function loadCitationLibrary() {
+    try {
+        citationDatabase = JSON.parse(localStorage.getItem(citationStorageKey()) || '{}');
+        if (!citationDatabase || typeof citationDatabase !== 'object' || Array.isArray(citationDatabase)) citationDatabase = {};
+    } catch {
+        citationDatabase = {};
+    }
+    citationRawBib = localStorage.getItem(citationRawStorageKey()) || '';
+}
+
+function persistCitationLibrary() {
+    localStorage.setItem(citationStorageKey(), JSON.stringify(citationDatabase));
+    localStorage.setItem(citationRawStorageKey(), citationRawBib);
+}
+
+function setToolTab(popup, tab, focus = true) {
+    if (!popup) return;
+    const selected = tab === 'library' ? 'library' : 'search';
+    GM_setValue('ui.activeTab', selected);
+
+    const searchTab = popup.querySelector('#obh-tab-search');
+    const libraryTab = popup.querySelector('#obh-tab-library');
+    const searchPanel = popup.querySelector('#obh-search-panel');
+    const libraryPanel = popup.querySelector('#obh-library-panel');
+
+    searchTab?.setAttribute('aria-selected', String(selected === 'search'));
+    libraryTab?.setAttribute('aria-selected', String(selected === 'library'));
+    if (searchPanel) searchPanel.hidden = selected !== 'search';
+    if (libraryPanel) libraryPanel.hidden = selected !== 'library';
+
+    if (selected === 'library') refreshCitationLibraryUI(popup);
+    positionPopup();
+
+    if (!focus || !showBox) return;
+    if (selected === 'search') {
+        const input = popup.querySelector('#obh-search-input');
+        input?.focus();
+        input?.select();
+    } else {
+        popup.querySelector('#obh-library-textarea')?.focus();
+    }
+}
+
+function refreshCitationLibraryUI(root = document) {
+    const area = root.querySelector('#obh-library-textarea');
+    const count = root.querySelector('#obh-library-count');
+    const project = root.querySelector('#obh-library-project');
+    const status = root.querySelector('#obh-library-status');
+    if (!area || !count) return;
+
+    if (area.dataset.projectId !== getOverleafProjectId()) {
+        area.value = citationRawBib;
+        area.dataset.projectId = getOverleafProjectId();
+    }
+
+    const n = Object.keys(citationDatabase).length;
+    count.textContent = `${n} entr${n === 1 ? 'y' : 'ies'}`;
+    if (project) project.textContent = `Project ${getOverleafProjectId().slice(0, 8)}…`;
+    if (status && !status.textContent) {
+        setStatus(status, 'info', n
+            ? `${n} saved citation entr${n === 1 ? 'y is' : 'ies are'} ready for hover previews.`
+            : 'No project bibliography is saved yet.');
+    }
+}
+
+function saveCitationLibraryFromUI(popup = document) {
+    const area = popup.querySelector('#obh-library-textarea');
+    const status = popup.querySelector('#obh-library-status');
+    const raw = area?.value.trim() ?? '';
+    if (!raw) {
+        setStatus(status, 'error', 'Paste your BibTeX file first.');
+        return;
+    }
+
+    try {
+        const parsed = parseCitationBibliography(raw);
+        const n = Object.keys(parsed).length;
+        if (!n) throw new Error('No citation entries were found.');
+        citationDatabase = parsed;
+        citationRawBib = raw;
+        persistCitationLibrary();
+        refreshCitationLibraryUI(popup);
+        setStatus(status, 'success', `Saved ${n} citation entr${n === 1 ? 'y' : 'ies'} for this project.`);
+    } catch (error) {
+        setStatus(status, 'error', error?.message || 'Could not parse the BibTeX file.');
+    }
+}
+
+function clearCitationLibraryFromUI(popup = document) {
+    citationDatabase = {};
+    citationRawBib = '';
+    localStorage.removeItem(citationStorageKey());
+    localStorage.removeItem(citationRawStorageKey());
+    const area = popup.querySelector('#obh-library-textarea');
+    if (area) area.value = '';
+    const status = popup.querySelector('#obh-library-status');
+    refreshCitationLibraryUI(popup);
+    setStatus(status, 'success', 'Saved project bibliography cleared.');
+    hideCitationHover(true);
+}
+
+function cleanCitationBibValue(value) {
+    if (!value) return '';
+    let text = String(value).trim();
+    if ((text.startsWith('{') && text.endsWith('}')) || (text.startsWith('"') && text.endsWith('"'))) {
+        text = text.slice(1, -1);
+    }
+    return text
+        .replace(/\\url\{([^}]*)\}/g, '$1')
+        .replace(/\\href\{([^}]*)\}\{([^}]*)\}/g, '$2')
+        .replace(/\\(?:textit|textbf|emph|mathrm|mathbf|mathit)\{([^}]*)\}/g, '$1')
+        .replace(/\\&/g, '&')
+        .replace(/\\_/g, '_')
+        .replace(/\\%/g, '%')
+        .replace(/\\#/g, '#')
+        .replace(/\\textregistered/g, '®')
+        .replace(/\\textquoteright/g, '’')
+        .replace(/[{}]/g, '')
+        .replace(/~/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function parseCitationFields(body) {
+    const fields = {};
+    let i = 0;
+    while (i < body.length) {
+        while (i < body.length && /[\s,]/.test(body[i])) i++;
+        const keyStart = i;
+        while (i < body.length && /[A-Za-z0-9_-]/.test(body[i])) i++;
+        const fieldName = body.slice(keyStart, i).trim().toLowerCase();
+        if (!fieldName) { i++; continue; }
+        while (i < body.length && /\s/.test(body[i])) i++;
+        if (body[i] !== '=') {
+            while (i < body.length && body[i] !== ',') i++;
+            continue;
+        }
+        i++;
+        while (i < body.length && /\s/.test(body[i])) i++;
+
+        let value = '';
+        if (body[i] === '{') {
+            let depth = 0;
+            let escaped = false;
+            const start = i;
+            while (i < body.length) {
+                const ch = body[i];
+                if (escaped) { escaped = false; i++; continue; }
+                if (ch === '\\') { escaped = true; i++; continue; }
+                if (ch === '{') depth++;
+                if (ch === '}') {
+                    depth--;
+                    if (depth === 0) { i++; break; }
+                }
+                i++;
+            }
+            value = body.slice(start, i);
+        } else if (body[i] === '"') {
+            const start = i;
+            i++;
+            let escaped = false;
+            while (i < body.length) {
+                const ch = body[i];
+                if (escaped) { escaped = false; i++; continue; }
+                if (ch === '\\') { escaped = true; i++; continue; }
+                if (ch === '"') { i++; break; }
+                i++;
+            }
+            value = body.slice(start, i);
+        } else {
+            const start = i;
+            while (i < body.length && body[i] !== ',') i++;
+            value = body.slice(start, i);
+        }
+        fields[fieldName] = cleanCitationBibValue(value);
+    }
+    return fields;
+}
+
+function parseCitationBibliography(text) {
+    const result = {};
+    const entryRegex = /@([A-Za-z][A-Za-z0-9_-]*)\s*([\{(])\s*([^,\s]+)\s*,/g;
+    let match;
+
+    while ((match = entryRegex.exec(text)) !== null) {
+        const type = match[1].toLowerCase();
+        if (['comment', 'preamble', 'string'].includes(type)) continue;
+        const opening = match[2];
+        const closing = opening === '{' ? '}' : ')';
+        const citationKey = match[3].trim();
+        let pos = entryRegex.lastIndex;
+        let depth = 1;
+        let braceDepth = 0;
+        let inQuote = false;
+        let escaped = false;
+
+        while (pos < text.length && depth > 0) {
+            const ch = text[pos];
+            if (escaped) { escaped = false; pos++; continue; }
+            if (ch === '\\') { escaped = true; pos++; continue; }
+            if (opening === '{') {
+                if (ch === '"' && depth === 1) inQuote = !inQuote;
+                if (!inQuote) {
+                    if (ch === '{') depth++;
+                    else if (ch === '}') depth--;
+                }
+            } else {
+                if (ch === '{') braceDepth++;
+                else if (ch === '}') braceDepth--;
+                else if (ch === '"' && braceDepth === 0) inQuote = !inQuote;
+                else if (!inQuote && braceDepth === 0) {
+                    if (ch === '(') depth++;
+                    else if (ch === ')') depth--;
+                }
+            }
+            pos++;
+        }
+
+        if (depth !== 0) throw new Error(`Incomplete BibTeX entry: ${citationKey}`);
+        const body = text.slice(entryRegex.lastIndex, pos - 1);
+        result[citationKey] = { type, key: citationKey, ...parseCitationFields(body) };
+        entryRegex.lastIndex = pos;
+        if (text[pos - 1] !== closing) break;
+    }
+    return result;
+}
+
+function formatCitationAuthors(authors) {
+    if (!authors) return 'Unknown author';
+    const parts = String(authors).split(/\s+and\s+/i).map(part => part.trim()).filter(Boolean);
+    if (parts.length <= 1) return parts[0] || 'Unknown author';
+    if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
+    return `${parts[0]} et al.`;
+}
+
+function citationVenue(entry) {
+    return entry.booktitle || entry.journal || entry.publisher || entry.organization || entry.howpublished || entry.school || entry.institution || '';
+}
+
+function safeHttpURL(raw) {
+    if (!raw) return '';
+    try {
+        const url = new URL(String(raw).trim());
+        return ['https:', 'http:'].includes(url.protocol) ? url.href : '';
+    } catch { return ''; }
+}
+
+function extractCitationURL(value) {
+    const direct = safeHttpURL(value);
+    if (direct) return direct;
+    const match = String(value || '').match(/https?:\/\/[^\s<>{}\\"']+/i);
+    return match ? safeHttpURL(match[0].replace(/[),.;]+$/, '')) : '';
+}
+
+function citationEntrySource(entry) {
+    if (!entry) return '';
+
+    const direct = extractCitationURL(entry.url) || extractCitationURL(entry.howpublished) || extractCitationURL(entry.note);
+    if (direct) return direct;
+
+    const doiRaw = String(entry.doi || '').trim();
+    if (doiRaw) {
+        const doi = normalizeDOI(doiRaw) || normalizeDOI(doiRaw.replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, ''));
+        if (doi) {
+            const official = sourceFromDOI(doi);
+            return safeHttpURL(official?.cid) || `https://doi.org/${doi}`;
+        }
+    }
+
+    const eprint = String(entry.eprint || '').trim().replace(/^arxiv:/i, '');
+    const archive = String(entry.archiveprefix || entry.eprinttype || '').trim();
+    if (eprint && (/arxiv/i.test(archive) || /^\d{4}\.\d{4,5}(?:v\d+)?$/i.test(eprint) || /^[a-z-]+\/\d{7}(?:v\d+)?$/i.test(eprint))) {
+        return `https://arxiv.org/abs/${encodeURIComponent(eprint).replace(/%2F/gi, '/')}`;
+    }
+
+    return '';
+}
+
+function citationSourceLabel(url) {
+    try {
+        const host = new URL(url).hostname.replace(/^www\./, '');
+        if (host === 'doi.org') return 'DOI';
+        if (host === 'arxiv.org') return 'arXiv';
+        if (host.includes('ieeexplore.ieee.org')) return 'IEEE Xplore';
+        if (host.includes('dl.acm.org')) return 'ACM DL';
+        if (host.includes('openreview.net')) return 'OpenReview';
+        if (host.includes('usenix.org')) return 'USENIX';
+        if (host.includes('dblp.org')) return 'DBLP';
+        if (host.includes('aclanthology.org')) return 'ACL Anthology';
+        if (host.includes('proceedings.neurips.cc')) return 'NeurIPS';
+        return host;
+    } catch { return 'Source'; }
+}
+
+function escapeCitationHTML(text) {
+    const div = document.createElement('div');
+    div.textContent = text == null ? '' : String(text);
+    return div.innerHTML;
+}
+
+function escapeCitationAttr(text) {
+    return escapeCitationHTML(text).replace(/`/g, '&#96;');
+}
+
+async function resolveCitationPaperSource(key) {
+    const entry = citationDatabase[key];
+    if (!entry) throw new Error('Citation not found in the saved project BibTeX.');
+
+    const direct = citationEntrySource(entry);
+    if (direct) return direct;
+
+    if (citationSourceCache.has(key)) return citationSourceCache.get(key);
+
+    const pending = (async () => {
+        const title = String(entry.title || '').trim();
+        if (!title) throw new Error('This BibTeX entry has no title to resolve.');
+
+        const results = await getArticleIDListDBLP(title, 10);
+        if (!results?.length) throw new Error('No matching paper source was found in DBLP.');
+
+        const wantedTitle = normalizeTitleKey(title);
+        const wantedYear = String(entry.year || '').match(/\d{4}/)?.[0] || '';
+        const wantedAuthor = normalizeKeyText(getFirstAuthor(entry.author || ''));
+
+        const scored = results.map((article, index) => {
+            const articleTitle = normalizeTitleKey(article.title || '');
+            const articleYear = String(article.year || '').trim();
+            const articleAuthor = normalizeKeyText(getFirstAuthor(article.author || ''));
+            let score = 0;
+            if (articleTitle === wantedTitle) score += 100;
+            else if (articleTitle.includes(wantedTitle) || wantedTitle.includes(articleTitle)) score += 60;
+            if (wantedYear && articleYear === wantedYear) score += 20;
+            if (wantedAuthor && articleAuthor === wantedAuthor) score += 15;
+            return { article, score, index };
+        }).sort((a, b) => b.score - a.score || a.index - b.index);
+
+        const article = scored[0].article;
+        const officialTargets = (article.electronicEditions || [])
+            .map(getOfficialSource)
+            .filter(Boolean);
+        const priority = ['CVF', 'BMVC', 'NeurIPS', 'PMLR', 'ACLAnthology', 'AAAI', 'IJCAI', 'KR', 'ECVA', 'Springer', 'OpenReview', 'ACM', 'IEEE'];
+        officialTargets.sort((a, b) => {
+            const ai = priority.indexOf(a.source);
+            const bi = priority.indexOf(b.source);
+            return (ai < 0 ? 999 : ai) - (bi < 0 ? 999 : bi);
+        });
+
+        if (officialTargets.length) {
+            const officialURL = safeHttpURL(officialTargets[0].cid);
+            if (officialURL) return officialURL;
+        }
+
+        for (const raw of article.electronicEditions || []) {
+            const url = safeHttpURL(raw);
+            if (url) return url;
+        }
+
+        const dblpURL = safeHttpURL(article.url);
+        if (dblpURL) return dblpURL;
+        throw new Error('A paper record was found, but it has no usable source URL.');
+    })().catch(error => {
+        citationSourceCache.delete(key);
+        throw error;
+    });
+
+    citationSourceCache.set(key, pending);
+    return pending;
+}
+
+function buildCitationEntryHTML(key) {
+    const entry = citationDatabase[key];
+    if (!entry) {
+        return `
+            <div class="obh-cite-entry">
+                <div class="obh-cite-key">${escapeCitationHTML(key)}</div>
+                <div class="obh-cite-missing">Citation not found in the saved project BibTeX.</div>
+                <div class="obh-cite-actions">
+                    <button type="button" class="obh-cite-action" data-obh-cite-library="1">Manage BibTeX</button>
+                </div>
+            </div>`;
+    }
+
+    const authors = formatCitationAuthors(entry.author);
+    const title = entry.title || 'Untitled';
+    const venue = citationVenue(entry);
+    const year = entry.year || '';
+    const meta = [venue, year].filter(Boolean).join(', ');
+    const keyAttr = escapeCitationAttr(key);
+
+    return `
+        <div class="obh-cite-entry">
+            <div class="obh-cite-key">${escapeCitationHTML(key)}</div>
+            <div class="obh-cite-authors">${escapeCitationHTML(authors)}</div>
+            <div class="obh-cite-title-static">${escapeCitationHTML(title)}</div>
+            ${meta ? `<div class="obh-cite-meta">${escapeCitationHTML(meta)}</div>` : ''}
+            <div class="obh-cite-actions">
+                <button type="button" class="obh-cite-action" data-obh-copy-title="${keyAttr}">Copy title</button>
+                <button type="button" class="obh-cite-action" data-obh-cite-copy="${keyAttr}">Copy \\cite{${escapeCitationHTML(key)}}</button>
+            </div>
+        </div>`;
+}
+
+function createCitationHoverCard() {
+    if (citationHoverCard?.isConnected) return citationHoverCard;
+    citationHoverCard = document.createElement('div');
+    citationHoverCard.id = 'obh-citation-hover';
+    citationHoverCard.setAttribute('role', 'dialog');
+    citationHoverCard.setAttribute('aria-label', 'Citation preview');
+
+    citationHoverCard.addEventListener('pointerenter', () => {
+        citationHoveringCard = true;
+        if (citationHideTimer) clearTimeout(citationHideTimer);
+    });
+    citationHoverCard.addEventListener('pointerleave', () => {
+        citationHoveringCard = false;
+        hideCitationHover();
+    });
+    citationHoverCard.addEventListener('click', async event => {
+        const target = event.target instanceof Element ? event.target : null;
+        if (!target) return;
+
+        const copyTitle = target.closest('[data-obh-copy-title]');
+        if (copyTitle) {
+            const key = copyTitle.getAttribute('data-obh-copy-title');
+            const title = citationDatabase[key]?.title || '';
+            if (!title) return;
+            await GM_setClipboard(title, 'text');
+            const old = copyTitle.textContent;
+            copyTitle.textContent = 'Title copied';
+            setTimeout(() => { if (copyTitle.isConnected) copyTitle.textContent = old; }, 700);
+            return;
+        }
+
+        const copy = target.closest('[data-obh-cite-copy]');
+        if (copy) {
+            const key = copy.getAttribute('data-obh-cite-copy');
+            await GM_setClipboard(`\\cite{${key}}`, 'text');
+            const old = copy.textContent;
+            copy.textContent = 'Copied';
+            setTimeout(() => { if (copy.isConnected) copy.textContent = old; }, 700);
+            return;
+        }
+
+        if (target.closest('[data-obh-cite-library]')) {
+            hideCitationHover(true);
+            openHelper('library');
+        }
+    });
+
+    document.body.appendChild(citationHoverCard);
+    return citationHoverCard;
+}
+
+function positionCitationHover(x, y) {
+    const card = createCitationHoverCard();
+    const margin = 10;
+    let left = x + 14;
+    let top = y + 14;
+    card.style.left = `${left}px`;
+    card.style.top = `${top}px`;
+    const rect = card.getBoundingClientRect();
+    if (rect.right > window.innerWidth - margin) left = Math.max(margin, x - rect.width - 14);
+    if (rect.bottom > window.innerHeight - margin) top = Math.max(margin, y - rect.height - 14);
+    card.style.left = `${left}px`;
+    card.style.top = `${top}px`;
+}
+
+function showCitationHover(keys, x, y) {
+    if (citationHideTimer) clearTimeout(citationHideTimer);
+    const card = createCitationHoverCard();
+    const signature = keys.join('\u0000');
+    const firstShow = signature !== citationHoverSignature || card.style.display === 'none';
+    if (firstShow) {
+        card.innerHTML = keys.map(buildCitationEntryHTML).join('');
+        citationHoverSignature = signature;
+    }
+    card.style.display = 'block';
+    if (firstShow) positionCitationHover(x, y);
+}
+
+function hideCitationHover(immediate = false) {
+    if (!citationHoverCard) return;
+    if (citationHideTimer) clearTimeout(citationHideTimer);
+    const run = () => {
+        if (citationHoveringCard && !immediate) return;
+        citationHoverCard.style.display = 'none';
+        citationHoverSignature = '';
+    };
+    if (immediate) run();
+    else citationHideTimer = setTimeout(run, 170);
+}
+
+function citationCaretFromPoint(x, y) {
+    if (document.caretPositionFromPoint) {
+        const pos = document.caretPositionFromPoint(x, y);
+        if (!pos) return null;
+        return { node: pos.offsetNode, offset: pos.offset };
+    }
+    if (document.caretRangeFromPoint) {
+        const range = document.caretRangeFromPoint(x, y);
+        if (!range) return null;
+        return { node: range.startContainer, offset: range.startOffset };
+    }
+    return null;
+}
+
+function citationLineElement(node) {
+    let el = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+    while (el) {
+        if (el.classList?.contains('cm-line') || el.classList?.contains('ace_line')) return el;
+        el = el.parentElement;
+    }
+    return null;
+}
+
+function citationTextOffset(element, targetNode, targetOffset) {
+    let offset = 0;
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+        if (node === targetNode) return offset + targetOffset;
+        offset += node.textContent.length;
+    }
+    return -1;
+}
+
+function citationKeysAtOffset(text, offset) {
+    const regex = /\\(?:cite|citep|citet|citealp|citealt|parencite|textcite|autocite|footcite|supercite)\*?(?:\s*\[[^\]]*\]){0,2}\s*\{([^}]*)\}/g;
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+        if (offset >= match.index && offset <= regex.lastIndex) {
+            return match[1].split(',').map(key => key.trim()).filter(Boolean);
+        }
+    }
+    return null;
+}
+
+function initCitationHoverPreview() {
+    document.addEventListener('mousemove', event => {
+        if (citationHoverCard?.contains(event.target)) return;
+        if (document.getElementById('obh-popup')?.contains(event.target)) {
+            hideCitationHover();
+            return;
+        }
+
+        const caret = citationCaretFromPoint(event.clientX, event.clientY);
+        if (!caret) { hideCitationHover(); return; }
+        const line = citationLineElement(caret.node);
+        if (!line) { hideCitationHover(); return; }
+        const offset = citationTextOffset(line, caret.node, caret.offset);
+        if (offset < 0) { hideCitationHover(); return; }
+        const keys = citationKeysAtOffset(line.textContent, offset);
+        if (!keys) { hideCitationHover(); return; }
+        showCitationHover(keys, event.clientX, event.clientY);
+    }, true);
+
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && citationHoverCard?.style.display === 'block') hideCitationHover(true);
+    }, true);
+
+    window.addEventListener('blur', () => hideCitationHover(true));
 }
 
 // Google Scholar Functions
