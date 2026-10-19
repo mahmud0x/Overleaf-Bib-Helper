@@ -71,7 +71,7 @@ Tampermonkey is a browser extension required to run UserScripts like Overleaf-Bi
 You can install the script in one of two ways:
 
 #### Option 2: Install from GitHub
-1. Go to the [GitHub repository](https://github.com/MLNLP-World/Overleaf-Bib-Helper).
+1. Go to the [GitHub repository](https://github.com/mahmud0x/Overleaf-Bib-Helper).
 2. Open the `Overleaf-Bib-Helper.js` file in the repository.
 3. Copy the entire script content.
 4. In your browser, click the Tampermonkey icon > **"Create a new script"**.
