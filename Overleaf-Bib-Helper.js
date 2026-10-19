@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         Overleaf Research Bib Toolkit
 // @namespace    com.Xunjian.overleaf.merged
-// @version      4.2.0
-// @description  Unified Overleaf paper search, BibTeX retrieval, project bibliography manager, and citation hover previews with copy actions
-// @author       Xunjian Yin (Bib Helper) + merged citation-preview enhancements
+// @version      4.4.0
+// @description  Unified Overleaf paper search, BibTeX retrieval, project bibliography manager, citation hover previews, and compiled-PDF reference alerts
+// @author       Xunjian Yin (Bib Helper)
 // @match        https://www.overleaf.com/project/*
 // @match        https://overleaf.com/project/*
 // @match        https://dl.acm.org/doi/*
@@ -48,6 +48,15 @@ let citationHoverCard = null;
 let citationHideTimer = null;
 let citationHoveringCard = false;
 let citationHoverSignature = '';
+
+// Compiled-PDF / LaTeX alert scanner.
+let alertItems = [];
+let alertScanTimer = null;
+let alertScanInProgress = false;
+let alertMutationObserver = null;
+let alertLastPdfSignature = '';
+let alertScanGeneration = 0;
+const ALERT_SCAN_DEBOUNCE_MS = 1400;
 const OFFICIAL_BIB_LABELS = Object.freeze({
     NeurIPS: 'NeurIPS proceedings',
     PMLR: 'PMLR',
@@ -361,6 +370,30 @@ function injectObhStyles() {
             box-shadow: 0 0 0 3px var(--obh-accent-weak);
         }
 
+        .obh-paste-button {
+            width: 34px;
+            height: 34px;
+            flex: 0 0 34px;
+            border-radius: 8px;
+            border: 1px solid var(--obh-border);
+            background: var(--obh-input-bg);
+            color: var(--obh-muted);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+        }
+
+        .obh-paste-button:hover {
+            color: var(--obh-accent);
+            border-color: var(--obh-accent);
+            background: var(--obh-hover);
+        }
+
+        .obh-paste-button:active { transform: translateY(1px); }
+        .obh-paste-button svg { fill: currentColor; }
+
         .obh-primary-button {
             width: 38px;
             height: 34px;
@@ -583,7 +616,7 @@ function injectObhStyles() {
 
         .obh-tabs {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr 1fr 1fr;
             gap: 4px;
             padding: 4px;
             margin-bottom: 10px;
@@ -614,6 +647,113 @@ function injectObhStyles() {
         }
 
         .obh-tab-panel[hidden] { display: none !important; }
+
+        .obh-tab-label {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+        }
+
+        .obh-alert-badge {
+            display: none;
+            min-width: 17px;
+            height: 17px;
+            padding: 0 5px;
+            align-items: center;
+            justify-content: center;
+            border-radius: 999px;
+            background: #b42318;
+            color: #fff;
+            font-size: 10px;
+            font-weight: 800;
+            line-height: 17px;
+        }
+
+        .obh-alert-badge[data-count]:not([data-count="0"]) { display: inline-flex; }
+
+        .obh-alert-toolbar {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 9px;
+        }
+
+        .obh-alert-summary {
+            min-width: 0;
+        }
+
+        .obh-alert-summary strong { font-size: 12.5px; }
+
+        .obh-alert-list {
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+            max-height: 430px;
+            overflow: auto;
+        }
+
+        .obh-alert-item {
+            padding: 9px 10px;
+            border: 1px solid var(--obh-border);
+            border-radius: 9px;
+            background: var(--obh-surface);
+        }
+
+        .obh-alert-item-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .obh-alert-kind {
+            font-size: 11.5px;
+            font-weight: 750;
+            color: var(--obh-fg);
+        }
+
+        .obh-alert-page {
+            flex: 0 0 auto;
+            color: var(--obh-muted);
+            font-size: 10.5px;
+        }
+
+        .obh-alert-context {
+            margin-top: 5px;
+            color: var(--obh-fg);
+            font-size: 11px;
+            line-height: 1.4;
+            overflow-wrap: anywhere;
+        }
+
+        .obh-alert-key {
+            margin-top: 5px;
+            color: var(--obh-muted);
+            font: 10.5px/1.35 ui-monospace, SFMono-Regular, Consolas, monospace;
+            overflow-wrap: anywhere;
+        }
+
+        .obh-alert-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 7px;
+        }
+
+        .obh-alert-empty {
+            padding: 18px 12px;
+            border: 1px dashed var(--obh-border);
+            border-radius: 9px;
+            color: var(--obh-muted);
+            text-align: center;
+            font-size: 11.5px;
+            line-height: 1.5;
+        }
+
+        .obh-alert-severity-warning { border-left: 3px solid #d97706; }
+        .obh-alert-severity-error { border-left: 3px solid #b42318; }
 
         .obh-library-card {
             padding: 11px;
@@ -838,6 +978,7 @@ function setCurrentScholarOrigin(origin) {
     }
     loadCitationLibrary();
     initCitationHoverPreview();
+    initAlertScanner();
     startInjectionWatcher();
 })();
 
@@ -953,8 +1094,12 @@ function bindPopupEvents(popup) {
     popup.querySelector('#obh-close').onclick = () => togglePopup(popup, false);
     popup.querySelector('#obh-tab-search').onclick = () => setToolTab(popup, 'search');
     popup.querySelector('#obh-tab-library').onclick = () => setToolTab(popup, 'library');
+    popup.querySelector('#obh-tab-alert').onclick = () => setToolTab(popup, 'alert');
+    popup.querySelector('#obh-alert-rescan').onclick = () => scanReferenceAlerts({ manual: true });
+    popup.querySelector('#obh-alert-list').onclick = handleAlertListClick;
     popup.querySelector('#obh-library-save').onclick = () => saveCitationLibraryFromUI(popup);
     popup.querySelector('#obh-library-clear').onclick = () => clearCitationLibraryFromUI(popup);
+    popup.querySelector('#obh-paste-search').onclick = () => pasteSearchFromClipboard(popup);
     popup.querySelector('#obh-search-word').onclick = () => queryArticle();
     popup.querySelector('#obh-search-input').onkeydown = (event) => {
         if (event.key === 'Enter' && !event.isComposing) {
@@ -1011,10 +1156,36 @@ function bindPopupEvents(popup) {
     popup.querySelector('#obh-download-bib').onclick = downloadPreview;
 }
 
+async function pasteSearchFromClipboard(popup = document) {
+    const input = popup.querySelector('#obh-search-input');
+    const status = popup.querySelector('#obh-status');
+    if (!input) return;
+
+    try {
+        if (!navigator.clipboard?.readText) {
+            throw new Error('Clipboard reading is not available in this browser.');
+        }
+        const text = (await navigator.clipboard.readText()).trim();
+        if (!text) {
+            setStatus(status, 'info', 'Clipboard is empty.');
+            input.focus();
+            return;
+        }
+        input.value = text;
+        GM_setValue('lastQuery', text);
+        input.focus();
+        input.setSelectionRange(text.length, text.length);
+        setStatus(status, 'success', 'Pasted from clipboard. Press Enter or click Search.');
+    } catch (error) {
+        setStatus(status, 'error', 'Clipboard access was blocked. Click the search box and press Ctrl+V.');
+        input.focus();
+    }
+}
+
 function openHelper(tab) {
     ensureInjected();
     const popup = getPopup();
-    if (tab === 'search' || tab === 'library') setToolTab(popup, tab, false);
+    if (tab === 'search' || tab === 'library' || tab === 'alert') setToolTab(popup, tab, false);
     togglePopup(popup, true);
 }
 
@@ -1038,16 +1209,18 @@ function togglePopup(popup, visible = !showBox, restoreFocus = true) {
         const editor = Array.from(document.querySelectorAll('.cm-editor')).find(isVisible);
         const background = editor ? parseCssColorToRgb(getComputedStyle(editor).backgroundColor) : null;
         popup.dataset.theme = background && (background.r * 0.299 + background.g * 0.587 + background.b * 0.114) < 128 ? 'dark' : 'light';
-        const activeTab = GM_getValue('ui.activeTab', 'search') === 'library' ? 'library' : 'search';
+        const storedTab = GM_getValue('ui.activeTab', 'search');
+        const activeTab = ['search', 'library', 'alert'].includes(storedTab) ? storedTab : 'search';
         setToolTab(popup, activeTab, false);
         positionPopup();
         if (activeTab === 'search') {
             const input = popup.querySelector('#obh-search-input');
             input.focus();
             input.select();
+        } else if (activeTab === 'library') {
+            popup.querySelector('#obh-library-textarea')?.focus();
         } else {
-            const area = popup.querySelector('#obh-library-textarea');
-            area.focus();
+            scheduleAlertScan(60);
         }
     } else if (restoreFocus && isVisible(focusBeforePopup)) {
         focusBeforePopup.focus();
@@ -1175,7 +1348,7 @@ function createBox() {
             <div class="obh-brand">
                 <div style="min-width:0;">
                     <div class="obh-title">Bib Toolkit</div>
-                    <div class="obh-subtitle">Search papers · manage BibTeX · inspect citations</div>
+                    <div class="obh-subtitle">Search papers · manage BibTeX · inspect citations · check PDF</div>
                 </div>
             </div>
             <button id="obh-close" class="obh-icon-button" type="button" aria-label="Close">
@@ -1186,14 +1359,20 @@ function createBox() {
         </div>
 
         <div class="obh-tabs" role="tablist" aria-label="Bib Toolkit views">
-            <button id="obh-tab-search" class="obh-tab" type="button" role="tab" aria-selected="true" aria-controls="obh-search-panel">Search papers</button>
-            <button id="obh-tab-library" class="obh-tab" type="button" role="tab" aria-selected="false" aria-controls="obh-library-panel">My BibTeX</button>
+            <button id="obh-tab-search" class="obh-tab" type="button" role="tab" aria-selected="true" aria-controls="obh-search-panel"><span class="obh-tab-label">Search papers</span></button>
+            <button id="obh-tab-library" class="obh-tab" type="button" role="tab" aria-selected="false" aria-controls="obh-library-panel"><span class="obh-tab-label">My BibTeX</span></button>
+            <button id="obh-tab-alert" class="obh-tab" type="button" role="tab" aria-selected="false" aria-controls="obh-alert-panel"><span class="obh-tab-label">Alert <span id="obh-alert-badge" class="obh-alert-badge" data-count="0">0</span></span></button>
         </div>
 
         <div id="obh-search-panel" class="obh-tab-panel" role="tabpanel" aria-labelledby="obh-tab-search">
         <div class="obh-search-row">
             <input id="obh-search-input" class="obh-search-input" aria-label="Search papers" placeholder="Title, author, keywords" autocomplete="off" list="obh-recent-queries" />
             <datalist id="obh-recent-queries"></datalist>
+            <button id="obh-paste-search" class="obh-paste-button" type="button" aria-label="Paste from clipboard" title="Paste from clipboard">
+                <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M16 4h-1.18A3 3 0 0 0 12 2a3 3 0 0 0-2.82 2H8a2 2 0 0 0-2 2v1H5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-1V6a2 2 0 0 0-2-2Zm-4-1a1 1 0 0 1 1 1h-2a1 1 0 0 1 1-1Zm7 17H5V9h1v1h12V9h1v11ZM8 6h8v2H8V6Z"/>
+                </svg>
+            </button>
             <button id="obh-search-word" class="obh-primary-button" type="button" aria-label="Search">
                 <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
@@ -1307,6 +1486,21 @@ function createBox() {
                 </div>
                 <div id="obh-library-status" class="obh-status" role="status" aria-live="polite"></div>
                 <div class="obh-tip"><strong>Hover a citation:</strong> move the pointer over <code>\cite{key}</code> in the editor. The card shows authors, title, venue, and year, with quick actions to <strong>Copy title</strong> or copy the citation command.</div>
+            </div>
+        </div>
+
+        <div id="obh-alert-panel" class="obh-tab-panel" role="tabpanel" aria-labelledby="obh-tab-alert" hidden>
+            <div class="obh-library-card">
+                <div class="obh-alert-toolbar">
+                    <div class="obh-alert-summary">
+                        <strong>Compiled-paper alerts</strong>
+                        <div id="obh-alert-summary-text" class="obh-library-help">Scan the compiled PDF for unresolved citations and cross-references.</div>
+                    </div>
+                    <button id="obh-alert-rescan" class="obh-secondary-button" type="button">Rescan PDF</button>
+                </div>
+                <div id="obh-alert-status" class="obh-status" role="status" aria-live="polite"></div>
+                <div id="obh-alert-list" class="obh-alert-list" aria-label="Reference alerts"></div>
+                <div class="obh-tip"><strong>Checks:</strong> PDF text such as <code>[?]</code>, <code>[??]</code>, <code>Table ??</code>, <code>Section ??</code>, and related unresolved markers. When available, LaTeX compile warnings are also correlated with your saved BibTeX.</div>
             </div>
         </div>
 
@@ -1427,6 +1621,7 @@ function createBox() {
         : 'Find papers with DBLP; use original BibTeX from supported official venues. Each result shows its citation source.');
 
     refreshCitationLibraryUI(box);
+    renderAlertUI(box);
     setToolTab(box, GM_getValue('ui.activeTab', 'search'), false);
     return box;
 }
@@ -2817,20 +3012,30 @@ function persistCitationLibrary() {
 
 function setToolTab(popup, tab, focus = true) {
     if (!popup) return;
-    const selected = tab === 'library' ? 'library' : 'search';
+    const selected = ['search', 'library', 'alert'].includes(tab) ? tab : 'search';
     GM_setValue('ui.activeTab', selected);
 
-    const searchTab = popup.querySelector('#obh-tab-search');
-    const libraryTab = popup.querySelector('#obh-tab-library');
-    const searchPanel = popup.querySelector('#obh-search-panel');
-    const libraryPanel = popup.querySelector('#obh-library-panel');
+    const tabs = {
+        search: popup.querySelector('#obh-tab-search'),
+        library: popup.querySelector('#obh-tab-library'),
+        alert: popup.querySelector('#obh-tab-alert'),
+    };
+    const panels = {
+        search: popup.querySelector('#obh-search-panel'),
+        library: popup.querySelector('#obh-library-panel'),
+        alert: popup.querySelector('#obh-alert-panel'),
+    };
 
-    searchTab?.setAttribute('aria-selected', String(selected === 'search'));
-    libraryTab?.setAttribute('aria-selected', String(selected === 'library'));
-    if (searchPanel) searchPanel.hidden = selected !== 'search';
-    if (libraryPanel) libraryPanel.hidden = selected !== 'library';
+    for (const name of Object.keys(tabs)) {
+        tabs[name]?.setAttribute('aria-selected', String(selected === name));
+        if (panels[name]) panels[name].hidden = selected !== name;
+    }
 
     if (selected === 'library') refreshCitationLibraryUI(popup);
+    if (selected === 'alert') {
+        renderAlertUI(popup);
+        scheduleAlertScan(80);
+    }
     positionPopup();
 
     if (!focus || !showBox) return;
@@ -2838,8 +3043,10 @@ function setToolTab(popup, tab, focus = true) {
         const input = popup.querySelector('#obh-search-input');
         input?.focus();
         input?.select();
-    } else {
+    } else if (selected === 'library') {
         popup.querySelector('#obh-library-textarea')?.focus();
+    } else {
+        popup.querySelector('#obh-alert-rescan')?.focus();
     }
 }
 
@@ -3361,6 +3568,397 @@ function initCitationHoverPreview() {
     }, true);
 
     window.addEventListener('blur', () => hideCitationHover(true));
+}
+
+
+// -----------------------------------------------------------------------------
+// Compiled PDF + LaTeX unresolved-reference alerts
+// -----------------------------------------------------------------------------
+
+function initAlertScanner() {
+    if (!document.body || alertMutationObserver) {
+        if (!document.body) window.addEventListener('DOMContentLoaded', initAlertScanner, { once: true });
+        return;
+    }
+
+    alertMutationObserver = new MutationObserver(records => {
+        let relevant = false;
+        for (const record of records) {
+            const nodes = [...record.addedNodes, ...record.removedNodes];
+            if (nodes.some(node => {
+                if (!(node instanceof Element)) return false;
+                const token = `${node.id || ''} ${node.className || ''}`.toLowerCase();
+                return /pdf|textlayer|page|compile|log|output|warning/.test(token) ||
+                    Boolean(node.querySelector?.('.textLayer, [data-page-number], [class*=pdf], [class*=compile], [class*=log]'));
+            })) {
+                relevant = true;
+                break;
+            }
+        }
+        if (relevant) scheduleAlertScan();
+    });
+    alertMutationObserver.observe(document.body, { childList: true, subtree: true });
+
+    window.addEventListener('focus', () => scheduleAlertScan(500));
+    scheduleAlertScan(1800);
+}
+
+function scheduleAlertScan(delay = ALERT_SCAN_DEBOUNCE_MS) {
+    if (alertScanTimer) clearTimeout(alertScanTimer);
+    alertScanTimer = setTimeout(() => scanReferenceAlerts({ manual: false }), delay);
+}
+
+function getCandidateDocuments() {
+    const docs = [{ doc: document, win: window, label: 'main' }];
+    for (const frame of document.querySelectorAll('iframe')) {
+        try {
+            if (frame.contentDocument?.documentElement) {
+                docs.push({ doc: frame.contentDocument, win: frame.contentWindow, label: frame.title || frame.id || 'iframe' });
+            }
+        } catch { /* Cross-origin frames are intentionally skipped. */ }
+    }
+    return docs;
+}
+
+function getPdfJsApplication() {
+    for (const candidate of getCandidateDocuments()) {
+        try {
+            const app = candidate.win?.PDFViewerApplication;
+            if (app?.pdfDocument?.numPages) return { app, ...candidate };
+        } catch { /* Continue to DOM fallback. */ }
+    }
+    return null;
+}
+
+function normalizePdfText(text) {
+    return String(text ?? '')
+        .replace(/\u00ad/g, '')
+        .replace(/[\u00a0\t\r\n]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function buildTextFromPdfItems(items) {
+    let out = '';
+    for (const item of items || []) {
+        const value = String(item?.str ?? '');
+        if (!value) continue;
+        if (out && !/\s$/.test(out) && !/^[,.;:!?%)\]}]/.test(value)) out += ' ';
+        out += value;
+        if (item?.hasEOL) out += ' ';
+    }
+    return normalizePdfText(out);
+}
+
+async function readAllPdfPages() {
+    const pdfjs = getPdfJsApplication();
+    if (pdfjs) {
+        const pages = [];
+        for (let pageNumber = 1; pageNumber <= pdfjs.app.pdfDocument.numPages; pageNumber++) {
+            try {
+                const page = await pdfjs.app.pdfDocument.getPage(pageNumber);
+                const content = await page.getTextContent({ normalizeWhitespace: true, disableCombineTextItems: false });
+                pages.push({ page: pageNumber, text: buildTextFromPdfItems(content.items), source: 'pdfjs' });
+            } catch { /* Keep scanning remaining pages. */ }
+        }
+        if (pages.length) return pages;
+    }
+
+    const pageMap = new Map();
+    for (const { doc } of getCandidateDocuments()) {
+        const layers = doc.querySelectorAll('.textLayer, .text-layer, [class*=textLayer]');
+        for (const layer of layers) {
+            const pageEl = layer.closest('[data-page-number], .page, [class*=pdf-page], [class*=pdfPage]');
+            let pageNumber = Number(pageEl?.dataset?.pageNumber || pageEl?.getAttribute?.('data-page-number'));
+            if (!Number.isFinite(pageNumber) || pageNumber <= 0) {
+                const idMatch = String(pageEl?.id || '').match(/(?:page|pdf)[-_]?(\d+)/i);
+                pageNumber = idMatch ? Number(idMatch[1]) : pageMap.size + 1;
+            }
+            const text = normalizePdfText(layer.innerText || layer.textContent || '');
+            if (text) pageMap.set(pageNumber, { page: pageNumber, text, source: 'text-layer', element: pageEl || layer });
+        }
+    }
+    return [...pageMap.values()].sort((a, b) => a.page - b.page);
+}
+
+function alertContext(text, start, end, radius = 95) {
+    const left = Math.max(0, start - radius);
+    const right = Math.min(text.length, end + radius);
+    let snippet = text.slice(left, right).trim();
+    if (left > 0) snippet = '…' + snippet;
+    if (right < text.length) snippet += '…';
+    return snippet;
+}
+
+function pushUniqueAlert(list, seen, item) {
+    const key = [item.type, item.page || 0, item.key || '', item.marker || '', Number.isFinite(item.offset) ? item.offset : '', normalizePdfText(item.context || item.message || '').slice(0, 180)].join('|');
+    if (seen.has(key)) return;
+    seen.add(key);
+    list.push(item);
+}
+
+function detectPdfAlerts(pages) {
+    const alerts = [];
+    const seen = new Set();
+
+    for (const pageInfo of pages) {
+        const text = pageInfo.text || '';
+        if (!text) continue;
+        const covered = [];
+
+        const patterns = [
+            {
+                type: 'Missing citation',
+                severity: 'error',
+                regex: /\[(?=[^\]\n]{0,100}\?)(?:[^\]\n]{0,100})\]/g,
+                accept: raw => /\?/.test(raw) && (/^\[\s*\?+\s*\]$/.test(raw) || /[,;]\s*\?+|\?+\s*[,;]/.test(raw) || /\?{2,}/.test(raw)),
+            },
+            {
+                type: 'Missing cross-reference',
+                severity: 'error',
+                regex: /\b(?:Fig(?:ure)?s?|Table|Section|Sec\.?|Appendix|Eq(?:uation)?s?|Algorithm|Alg\.?)\s*(?:~\s*)?\?{1,2}(?=\s|[.,;:)\]}]|$)/gi,
+                accept: () => true,
+            },
+        ];
+
+        for (const pattern of patterns) {
+            pattern.regex.lastIndex = 0;
+            let match;
+            while ((match = pattern.regex.exec(text)) !== null) {
+                if (!pattern.accept(match[0])) continue;
+                covered.push([match.index, pattern.regex.lastIndex]);
+                pushUniqueAlert(alerts, seen, {
+                    source: 'pdf',
+                    type: pattern.type,
+                    severity: pattern.severity,
+                    page: pageInfo.page,
+                    marker: match[0],
+                    offset: match.index,
+                    context: alertContext(text, match.index, pattern.regex.lastIndex),
+                });
+            }
+        }
+
+        const generic = /\?{2,}/g;
+        let match;
+        while ((match = generic.exec(text)) !== null) {
+            if (covered.some(([a, b]) => match.index >= a && match.index < b)) continue;
+            pushUniqueAlert(alerts, seen, {
+                source: 'pdf',
+                type: 'Possible unresolved reference',
+                severity: 'warning',
+                page: pageInfo.page,
+                marker: match[0],
+                offset: match.index,
+                context: alertContext(text, match.index, generic.lastIndex),
+            });
+        }
+    }
+    return alerts;
+}
+
+function collectCompileLogText() {
+    const pieces = [];
+    const selectors = [
+        '[class*=compile][class*=log]', '[class*=logs]', '[class*=log-entry]', '[class*=output]',
+        '[data-test-id*=log]', '[data-testid*=log]', '[aria-label*=log i]', '[aria-label*=compile i]'
+    ];
+    for (const { doc } of getCandidateDocuments()) {
+        for (const selector of selectors) {
+            for (const el of doc.querySelectorAll(selector)) {
+                if (el.closest?.('#obh-popup, #obh-citation-hover')) continue;
+                const text = el.innerText || el.textContent || '';
+                if (text && /undefined|LaTeX Warning|Package .* Warning/i.test(text)) pieces.push(text);
+            }
+        }
+    }
+    return normalizePdfText(pieces.join('\n')).slice(-600000);
+}
+
+function detectCompileAlerts(logText) {
+    if (!logText) return [];
+    const alerts = [];
+    const seen = new Set();
+    const patterns = [
+        { type: 'Undefined citation', kind: 'citation', regex: /(?:LaTeX|Package\s+\w+)?\s*Warning:\s*Citation\s+[`'‘“]?([^`'’”\s,]+)[`'’”]?[^.\n]{0,180}?undefined/gi },
+        { type: 'Undefined reference', kind: 'reference', regex: /(?:LaTeX|Package\s+\w+)?\s*Warning:\s*(?:Reference|reference)\s+[`'‘“]?([^`'’”\s,]+)[`'’”]?[^.\n]{0,180}?undefined/gi },
+    ];
+    for (const p of patterns) {
+        p.regex.lastIndex = 0;
+        let match;
+        while ((match = p.regex.exec(logText)) !== null) {
+            const key = match[1]?.trim() || '';
+            const existsInSavedBib = p.kind === 'citation' ? Object.hasOwn(citationDatabase, key) : null;
+            pushUniqueAlert(alerts, seen, {
+                source: 'compile',
+                type: p.type,
+                severity: 'error',
+                key,
+                context: normalizePdfText(match[0]),
+                bibStatus: existsInSavedBib == null ? '' : existsInSavedBib ? 'present' : 'missing',
+            });
+        }
+    }
+    return alerts;
+}
+
+function mergeAlertEvidence(pdfAlerts, compileAlerts) {
+    const merged = [...pdfAlerts];
+    for (const item of compileAlerts) {
+        const duplicate = merged.find(existing => existing.type === item.type && existing.key && existing.key === item.key);
+        if (duplicate) {
+            duplicate.compileContext = item.context;
+            duplicate.bibStatus = item.bibStatus;
+        } else {
+            merged.push(item);
+        }
+    }
+    return merged.sort((a, b) => {
+        const ap = Number.isFinite(a.page) ? a.page : Number.MAX_SAFE_INTEGER;
+        const bp = Number.isFinite(b.page) ? b.page : Number.MAX_SAFE_INTEGER;
+        if (ap !== bp) return ap - bp;
+        return a.type.localeCompare(b.type);
+    });
+}
+
+function computePdfSignature(pages) {
+    if (!pages.length) return '';
+    const first = pages[0]?.text?.slice(0, 120) || '';
+    const last = pages.at(-1)?.text?.slice(-120) || '';
+    return `${pages.length}|${first}|${last}`;
+}
+
+async function scanReferenceAlerts({ manual = false } = {}) {
+    if (alertScanInProgress) return;
+    alertScanInProgress = true;
+    const generation = ++alertScanGeneration;
+    const popup = document.getElementById('obh-popup');
+    const status = popup?.querySelector('#obh-alert-status');
+    const rescan = popup?.querySelector('#obh-alert-rescan');
+    if (rescan) rescan.disabled = true;
+    if (status) setStatus(status, 'loading', 'Scanning compiled PDF for unresolved references…');
+
+    try {
+        const pages = await readAllPdfPages();
+        if (generation !== alertScanGeneration) return;
+        if (!pages.length) {
+            alertItems = detectCompileAlerts(collectCompileLogText());
+            renderAlertUI(popup || document);
+            if (status) setStatus(status, alertItems.length ? 'info' : 'error', alertItems.length
+                ? `PDF text is not currently accessible; showing ${alertItems.length} compile-warning alert${alertItems.length === 1 ? '' : 's'}.`
+                : 'Compiled PDF text is not currently accessible. Open the PDF preview and click Rescan PDF.');
+            return;
+        }
+
+        const signature = computePdfSignature(pages);
+        const pdfAlerts = detectPdfAlerts(pages);
+        const compileAlerts = detectCompileAlerts(collectCompileLogText());
+        alertItems = mergeAlertEvidence(pdfAlerts, compileAlerts);
+        alertLastPdfSignature = signature;
+        renderAlertUI(popup || document);
+
+        if (status) {
+            const count = alertItems.length;
+            setStatus(status, count ? 'info' : 'success', count
+                ? `Found ${count} unresolved-reference alert${count === 1 ? '' : 's'} across ${pages.length} PDF page${pages.length === 1 ? '' : 's'}.`
+                : `No unresolved citation/reference markers found across ${pages.length} PDF page${pages.length === 1 ? '' : 's'}.`);
+        }
+    } catch (error) {
+        if (status) setStatus(status, 'error', error?.message || 'PDF alert scan failed.');
+    } finally {
+        alertScanInProgress = false;
+        if (rescan) rescan.disabled = false;
+        updateAlertBadge();
+        positionPopup();
+    }
+}
+
+function updateAlertBadge(root = document) {
+    const badge = root.querySelector?.('#obh-alert-badge') || document.querySelector('#obh-alert-badge');
+    if (!badge) return;
+    badge.dataset.count = String(alertItems.length);
+    badge.textContent = String(alertItems.length);
+    badge.setAttribute('aria-label', `${alertItems.length} alert${alertItems.length === 1 ? '' : 's'}`);
+}
+
+function alertItemHTML(item, index) {
+    const page = Number.isFinite(item.page) ? `Page ${item.page}` : item.source === 'compile' ? 'Compile log' : '';
+    const key = item.key ? `<div class="obh-alert-key">Key: ${escapeCitationHTML(item.key)}${item.bibStatus ? ` · Saved BibTeX: ${item.bibStatus === 'present' ? 'found' : 'missing'}` : ''}</div>` : '';
+    const compile = item.compileContext ? `<div class="obh-alert-key">Compiler: ${escapeCitationHTML(item.compileContext)}</div>` : '';
+    const view = Number.isFinite(item.page) ? `<button type="button" class="obh-result-action" data-alert-action="view" data-alert-index="${index}">View in PDF</button>` : '';
+    const copyKey = item.key ? `<button type="button" class="obh-result-action" data-alert-action="copy-key" data-alert-index="${index}">Copy key</button>` : '';
+    return `<div class="obh-alert-item obh-alert-severity-${escapeCitationHTML(item.severity || 'warning')}">
+        <div class="obh-alert-item-head"><div class="obh-alert-kind">${escapeCitationHTML(item.type)}</div><div class="obh-alert-page">${escapeCitationHTML(page)}</div></div>
+        <div class="obh-alert-context">${escapeCitationHTML(item.context || item.message || item.marker || '')}</div>
+        ${key}${compile}
+        <div class="obh-alert-actions">${view}${copyKey}</div>
+    </div>`;
+}
+
+function renderAlertUI(root = document) {
+    const list = root.querySelector?.('#obh-alert-list') || document.querySelector('#obh-alert-list');
+    const summary = root.querySelector?.('#obh-alert-summary-text') || document.querySelector('#obh-alert-summary-text');
+    updateAlertBadge(root);
+    if (!list) return;
+
+    if (!alertItems.length) {
+        list.innerHTML = '<div class="obh-alert-empty">No unresolved citation/reference markers are currently detected.<br>Use <strong>Rescan PDF</strong> after recompiling.</div>';
+        if (summary) summary.textContent = 'No unresolved references detected in the most recent scan.';
+        return;
+    }
+
+    list.innerHTML = alertItems.map(alertItemHTML).join('');
+    if (summary) {
+        const pdfCount = alertItems.filter(item => item.source === 'pdf').length;
+        const compileCount = alertItems.filter(item => item.source === 'compile').length;
+        summary.textContent = `${alertItems.length} alert${alertItems.length === 1 ? '' : 's'} · ${pdfCount} visible in PDF${compileCount ? ` · ${compileCount} from compile warnings` : ''}`;
+    }
+}
+
+async function handleAlertListClick(event) {
+    const button = event.target instanceof Element ? event.target.closest('[data-alert-action]') : null;
+    if (!button) return;
+    const index = Number(button.dataset.alertIndex);
+    const item = alertItems[index];
+    if (!item) return;
+    const action = button.dataset.alertAction;
+    if (action === 'copy-key' && item.key) {
+        await GM_setClipboard(item.key, 'text');
+        const old = button.textContent;
+        button.textContent = 'Copied';
+        setTimeout(() => { if (button.isConnected) button.textContent = old; }, 650);
+        return;
+    }
+    if (action === 'view' && Number.isFinite(item.page)) {
+        jumpToPdfPage(item.page);
+    }
+}
+
+function jumpToPdfPage(pageNumber) {
+    const pdfjs = getPdfJsApplication();
+    if (pdfjs?.app?.pdfViewer) {
+        try {
+            pdfjs.app.pdfViewer.currentPageNumber = pageNumber;
+            const pageView = pdfjs.app.pdfViewer.getPageView?.(pageNumber - 1);
+            pageView?.div?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+            return true;
+        } catch { /* DOM fallback below. */ }
+    }
+
+    for (const { doc } of getCandidateDocuments()) {
+        const selectors = [
+            `[data-page-number="${pageNumber}"]`, `#page${pageNumber}`,
+            `#page-${pageNumber}`, `.page[data-page-number="${pageNumber}"]`
+        ];
+        for (const selector of selectors) {
+            const el = doc.querySelector(selector);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 // Google Scholar Functions
